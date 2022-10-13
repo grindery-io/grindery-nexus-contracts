@@ -37,7 +37,7 @@ contract GrinderyNexusDrone is Initializable {
         hubAddress = _hubAddress;
     }
 
-    function getNextNonce() public view returns (uint256) {
+    function getNextNonce() onlyProxy public view returns (uint256) {
         return nonce;
     }
 

@@ -84,7 +84,7 @@ describe("GrinderyNexus", function () {
       const droneInstance = drone.attach(droneAddress).connect(operator);
 
       const callData = testContract.interface.encodeFunctionData("echo", ["0x1"]);
-      const nonce = await drone.getNextNonce();
+      const nonce = await droneInstance.getNextNonce();
       expect(nonce).to.equal("0x0");
       const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
       const signature = await operator.signMessage(ethers.utils.arrayify(transactionHash));
