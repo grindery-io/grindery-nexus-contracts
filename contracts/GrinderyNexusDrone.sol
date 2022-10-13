@@ -37,7 +37,7 @@ contract GrinderyNexusDrone is Initializable {
         hubAddress = _hubAddress;
     }
 
-    function getNextNonce() onlyProxy public view returns (uint256) {
+    function getNextNonce() public view onlyProxy returns (uint256) {
         return nonce;
     }
 
@@ -59,8 +59,9 @@ contract GrinderyNexusDrone is Initializable {
             "signature is invalid"
         );
         nonce += 1;
-        (success, returnData) = _target.call(_data);
-        emit TransactionResult(keccak256(_signature), success, returnData);
+        bytes32 signatureHash = keccak256(_signature);
+        (success, returnData) = _target.call{gas: gasleft() - 20}(_data);
+        emit TransactionResult(signatureHash, success, returnData);
         return (success, returnData);
     }
 }
