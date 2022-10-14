@@ -49,14 +49,15 @@ contract GrinderyNexusDrone is Initializable {
     ) public onlyProxy returns (bool success, bytes memory returnData) {
         require(hubAddress != address(0x0), "hubAddress is invalid");
         require(_nonce == nonce, "nonce is invalid");
+        address signer = GrinderyNexusHub(hubAddress).validateTransaction(
+            _target,
+            _nonce,
+            _data,
+            _signature
+        );
         require(
-            GrinderyNexusHub(hubAddress).validateTransaction(
-                _target,
-                _nonce,
-                _data,
-                _signature
-            ) == msg.sender,
-            "signature is invalid"
+            signer == msg.sender || hubAddress == msg.sender,
+            "Unauthorized sender"
         );
         nonce += 1;
         bytes32 signatureHash = keccak256(_signature);
