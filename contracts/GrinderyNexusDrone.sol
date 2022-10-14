@@ -2,7 +2,7 @@
 pragma solidity ^0.8.17;
 
 // Uncomment this line to use console.log
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -61,7 +61,8 @@ contract GrinderyNexusDrone is Initializable {
         );
         nonce += 1;
         bytes32 signatureHash = keccak256(_signature);
-        (success, returnData) = _target.call{gas: gasleft() - 20}(_data);
+        // Need to reserve 8000 gas to ensure all(?) errors got caught
+        (success, returnData) = _target.call{gas: gasleft() - 8000}(_data);
         emit TransactionResult(signatureHash, success, returnData);
         return (success, returnData);
     }

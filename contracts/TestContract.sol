@@ -3,6 +3,8 @@ pragma solidity ^0.8.17;
 
 // import "hardhat/console.sol";
 
+import "@openzeppelin/contracts-upgradeable/proxy/ClonesUpgradeable.sol";
+
 contract TestContract {
     uint256 lastValue;
 

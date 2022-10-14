@@ -150,5 +150,41 @@ describe("GrinderyNexus", function () {
         .withArgs(ethers.utils.keccak256(ethers.utils.arrayify(signature)), false, anyValue);
       expect(await droneInstance.getNextNonce()).to.equal("0x1");
     });
+    it("Should be able to handle gas exhaustion", async function () {
+      const { operator, testContract, hubOperator, droneAddress, droneInstance } = await loadFixture(
+        deployDroneFixture
+      );
+
+      await expect(testContract.testDrainAllGas("0x0")).to.be.reverted;
+
+      const callData = testContract.interface.encodeFunctionData("testDrainAllGas", ["0x1"]);
+      const nonce = await droneInstance.getNextNonce();
+      expect(nonce).to.equal("0x0");
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = await operator.signMessage(ethers.utils.arrayify(transactionHash));
+      const transaction = droneInstance.sendTransaction(testContract.address, nonce, callData, signature, {
+        gasLimit: 150000,
+      });
+      await expect(transaction)
+        .to.emit(droneInstance, "TransactionResult")
+        .withArgs(ethers.utils.keccak256(ethers.utils.arrayify(signature)), false, anyValue);
+      expect(await droneInstance.getNextNonce()).to.equal("0x1");
+    });
+    it("Should be able to handle long return data", async function () {
+      const { operator, testContract, hubOperator, droneAddress, droneInstance } = await loadFixture(
+        deployDroneFixture
+      );
+
+      const callData = testContract.interface.encodeFunctionData("testLongReturnValue", [10]);
+      const nonce = await droneInstance.getNextNonce();
+      expect(nonce).to.equal("0x0");
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = await operator.signMessage(ethers.utils.arrayify(transactionHash));
+      const transaction = droneInstance.sendTransaction(testContract.address, nonce, callData, signature);
+      await expect(transaction)
+        .to.emit(droneInstance, "TransactionResult")
+        .withArgs(ethers.utils.keccak256(ethers.utils.arrayify(signature)), true, anyValue);
+      expect(await droneInstance.getNextNonce()).to.equal("0x1");
+    });
   });
 });
