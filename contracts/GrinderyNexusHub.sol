@@ -50,9 +50,9 @@ contract GrinderyNexusHub is
         __Ownable2Step_init();
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address) internal override onlyOwner onlyProxy {}
 
-    function setOperator(address newOperator) public onlyOwner {
+    function setOperator(address newOperator) public onlyOwner onlyProxy {
         emit OperatorChanged(operator, newOperator);
         operator = newOperator;
     }
@@ -60,6 +60,7 @@ contract GrinderyNexusHub is
     function setDroneImplementation(address newDroneImplementation)
         public
         onlyOwner
+        onlyProxy
     {
         emit DroneImplementationChanged(
             droneImplementation,
@@ -75,6 +76,7 @@ contract GrinderyNexusHub is
     function getUserDroneAddress(address user)
         public
         view
+        onlyProxy
         returns (address droneAddress)
     {
         require(
@@ -91,6 +93,7 @@ contract GrinderyNexusHub is
     function deployDrone(address user)
         public
         onlyOperator
+        onlyProxy
         returns (address droneAddress)
     {
         require(
@@ -110,9 +113,19 @@ contract GrinderyNexusHub is
         address target,
         bytes memory data,
         bytes memory signature
-    ) public onlyOperator returns (bool success, bytes memory returnData) {
+    )
+        public
+        onlyOperator
+        onlyProxy
+        returns (bool success, bytes memory returnData)
+    {
         address drone = deployDrone(user);
-        (success, returnData) = GrinderyNexusDrone(drone).sendTransaction(target, 0, data, signature);
+        (success, returnData) = GrinderyNexusDrone(drone).sendTransaction(
+            target,
+            0,
+            data,
+            signature
+        );
         return (success, returnData);
     }
 
@@ -121,7 +134,7 @@ contract GrinderyNexusHub is
         uint256 nonce,
         bytes memory data,
         bytes memory signature
-    ) external view returns (address signer) {
+    ) external view onlyProxy returns (address signer) {
         require(operator != address(0x0), "Operator address is not set");
         address sender = _msgSender();
         bytes32 hash = getTransactionHash(sender, target, nonce, data);
@@ -135,7 +148,7 @@ contract GrinderyNexusHub is
         address target,
         uint256 nonce,
         bytes memory data
-    ) public view returns (bytes32 hash) {
+    ) public view onlyProxy returns (bytes32 hash) {
         return
             keccak256(
                 abi.encodePacked(

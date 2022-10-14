@@ -14,9 +14,19 @@ describe("GrinderyNexus", function () {
     const GrinderyNexusHub = await ethers.getContractFactory("GrinderyNexusHub");
     const GrinderyNexusDrone = await ethers.getContractFactory("GrinderyNexusDrone");
     const TestContract = await ethers.getContractFactory("TestContract");
-    const hub = await GrinderyNexusHub.deploy();
-    const drone = await GrinderyNexusDrone.deploy(hub.address);
+    const hubImpl = await GrinderyNexusHub.deploy();
     const testContract = await TestContract.deploy();
+
+    const ERC1967Proxy = await ethers.getContractFactory("ERC1967Proxy");
+    const hubProxy = await ERC1967Proxy.deploy(hubImpl.address, hubImpl.interface.encodeFunctionData("initialize"));
+    const hub = hubImpl.attach(hubProxy.address);
+
+    const droneImpl = await GrinderyNexusDrone.deploy(hub.address);
+    const UpgradeableBeacon = await ethers.getContractFactory("UpgradeableBeacon");
+    const StaticBeaconProxy = await ethers.getContractFactory("StaticBeaconProxy");
+    const droneBeacon = await UpgradeableBeacon.deploy(droneImpl.address);
+    const droneProxy = await StaticBeaconProxy.deploy(droneBeacon.address);
+    const drone = droneImpl.attach(droneProxy.address);
 
     await hub.setOperator(operator.address);
     await hub.setDroneImplementation(drone.address);
