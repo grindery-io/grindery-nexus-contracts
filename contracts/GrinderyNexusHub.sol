@@ -10,6 +10,8 @@ import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/ClonesUpgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
+import "./GrinderyNexusDrone.sol";
+
 using ECDSA for bytes32;
 
 contract GrinderyNexusHub is
@@ -101,6 +103,17 @@ contract GrinderyNexusHub is
         );
         emit DeployedDrone(droneAddress);
         return droneAddress;
+    }
+
+    function deployDroneAndSendTransaction(
+        address user,
+        address target,
+        bytes memory data,
+        bytes memory signature
+    ) public onlyOperator returns (bool success, bytes memory returnData) {
+        address drone = deployDrone(user);
+        (success, returnData) = GrinderyNexusDrone(drone).sendTransaction(target, 0, data, signature);
+        return (success, returnData);
     }
 
     function validateTransaction(

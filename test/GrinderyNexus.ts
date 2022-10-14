@@ -9,7 +9,7 @@ describe("GrinderyNexus", function () {
   // and reset Hardhat Network to that snapshot in every test.
   async function deployFixture() {
     // Contracts are deployed using the first signer/account by default
-    const [owner, operator, user] = await ethers.getSigners();
+    const [owner, operator, user, user2] = await ethers.getSigners();
 
     const GrinderyNexusHub = await ethers.getContractFactory("GrinderyNexusHub");
     const GrinderyNexusDrone = await ethers.getContractFactory("GrinderyNexusDrone");
@@ -21,7 +21,7 @@ describe("GrinderyNexus", function () {
     await hub.setOperator(operator.address);
     await hub.setDroneImplementation(drone.address);
 
-    return { hub, drone, owner, operator, user, testContract };
+    return { hub, drone, owner, operator, user, user2, testContract };
   }
 
   describe("Deployment", function () {
@@ -185,6 +185,51 @@ describe("GrinderyNexus", function () {
         .to.emit(droneInstance, "TransactionResult")
         .withArgs(ethers.utils.keccak256(ethers.utils.arrayify(signature)), true, anyValue);
       expect(await droneInstance.getNextNonce()).to.equal("0x1");
+    });
+    it("Should be able to deploy drone and send transaction at the same time", async function () {
+      const { user2, operator, testContract, hubOperator, droneInstance } = await loadFixture(deployDroneFixture);
+
+      const callData = testContract.interface.encodeFunctionData("echo", ["0x1"]);
+      const nonce = 0;
+      const droneAddress = await hubOperator.getUserDroneAddress(user2.address);
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = await operator.signMessage(ethers.utils.arrayify(transactionHash));
+      const transaction = hubOperator.deployDroneAndSendTransaction(
+        user2.address,
+        testContract.address,
+        callData,
+        signature
+      );
+      const newDroneInstance = droneInstance.attach(droneAddress);
+      await expect(transaction).to.emit(hubOperator, "DeployedDrone").withArgs(droneAddress);
+      await expect(transaction)
+        .to.emit(newDroneInstance, "TransactionResult")
+        .withArgs(
+          ethers.utils.keccak256(ethers.utils.arrayify(signature)),
+          true,
+          "0x0000000000000000000000000000000000000000000000000000000000000001"
+        );
+      await expect(transaction)
+        .to.emit(testContract, "Echo")
+        .withArgs(
+          droneAddress,
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000000000000000000000000001"
+        );
+      expect(await newDroneInstance.getNextNonce()).to.equal("0x1");
+    });
+    it("Should fail when deployDroneAndSendTransaction is called for an user who already has drone", async function () {
+      const { user, operator, testContract, hubOperator, droneInstance } = await loadFixture(deployDroneFixture);
+
+      const callData = testContract.interface.encodeFunctionData("echo", ["0x1"]);
+      const nonce = await droneInstance.getNextNonce();
+      expect(nonce).to.equal("0x0");
+      const droneAddress = await hubOperator.getUserDroneAddress(user.address);
+      expect(droneAddress).to.equal(droneInstance.address);
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = await operator.signMessage(ethers.utils.arrayify(transactionHash));
+      await expect(hubOperator.deployDroneAndSendTransaction(user.address, testContract.address, callData, signature))
+        .to.be.reverted;
     });
   });
 });
