@@ -46,10 +46,18 @@ describe("GrinderyNexus", function () {
         .to.emit(hub, "DroneImplementationChanged")
         .withArgs(drone.address, newDrone.address);
     });
-    it("Should reject setting operator from non-owner", async function () {
+    it("Should reject setting operator by non-owner", async function () {
       const { hub, user } = await loadFixture(deployFixture);
 
       await expect(hub.connect(user).setOperator(user.address)).to.be.reverted;
+    });
+    it("Should reject setting drone implementation by non-owner", async function () {
+      const { hub, user } = await loadFixture(deployFixture);
+
+      const GrinderyNexusDrone = await ethers.getContractFactory("GrinderyNexusDrone");
+      const newDrone = await GrinderyNexusDrone.deploy(hub.address);
+
+      await expect(hub.connect(user).setDroneImplementation(newDrone.address)).to.be.reverted;
     });
     it("Should be able to transfer ownership", async function () {
       const { hub, user } = await loadFixture(deployFixture);
@@ -57,6 +65,10 @@ describe("GrinderyNexus", function () {
       expect(await hub.pendingOwner()).to.equal(user.address);
       expect(await hub.connect(user).acceptOwnership()).to.emit(hub, "OwnershipTransferred");
       expect(await hub.owner()).to.equal(user.address);
+    });
+    it("Should reject ownership transfer by non-owner", async function () {
+      const { hub, user } = await loadFixture(deployFixture);
+      await expect(hub.connect(user).transferOwnership(user.address)).to.be.reverted;
     });
     it("Should revert if malicious user tries to claim pending ownership", async function () {
       const { hub, user, operator } = await loadFixture(deployFixture);
