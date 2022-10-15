@@ -31,7 +31,18 @@ describe("GrinderyNexus", function () {
     await hub.setOperator(operator.address);
     await hub.setDroneImplementation(drone.address);
 
-    return { hub, drone, owner, operator, user, user2, testContract };
+    return {
+      hub,
+      drone,
+      droneBeacon,
+      owner,
+      operator,
+      user,
+      user2,
+      testContract,
+      GrinderyNexusHub,
+      GrinderyNexusDrone,
+    };
   }
 
   describe("Deployment", function () {
@@ -48,8 +59,7 @@ describe("GrinderyNexus", function () {
         .withArgs(operator.address, user.address);
     });
     it("Should allow setting new drone implementation", async function () {
-      const { hub, drone } = await loadFixture(deployFixture);
-      const GrinderyNexusDrone = await ethers.getContractFactory("GrinderyNexusDrone");
+      const { hub, drone, GrinderyNexusDrone } = await loadFixture(deployFixture);
       const newDrone = await GrinderyNexusDrone.deploy(hub.address);
 
       expect(await hub.setDroneImplementation(newDrone.address))
@@ -62,9 +72,8 @@ describe("GrinderyNexus", function () {
       await expect(hub.connect(user).setOperator(user.address)).to.be.reverted;
     });
     it("Should reject setting drone implementation by non-owner", async function () {
-      const { hub, user } = await loadFixture(deployFixture);
+      const { hub, user, GrinderyNexusDrone } = await loadFixture(deployFixture);
 
-      const GrinderyNexusDrone = await ethers.getContractFactory("GrinderyNexusDrone");
       const newDrone = await GrinderyNexusDrone.deploy(hub.address);
 
       await expect(hub.connect(user).setDroneImplementation(newDrone.address)).to.be.reverted;
@@ -87,6 +96,24 @@ describe("GrinderyNexus", function () {
       await expect(hub.connect(operator).acceptOwnership()).to.be.reverted;
     });
   });
+  describe("Hub Upgrade", function () {
+    it("Should be able to upgrade", async function () {
+      const { hub, GrinderyNexusHub } = await loadFixture(deployFixture);
+      const newHubImpl = await GrinderyNexusHub.deploy();
+      expect(await hub.upgradeTo(newHubImpl.address))
+        .to.emit(hub, "Upgraded")
+        .withArgs(newHubImpl.address);
+    });
+    it("Should reject upgrade by non-owner", async function () {
+      const { hub, user, GrinderyNexusHub } = await loadFixture(deployFixture);
+      const newHubImpl = await GrinderyNexusHub.deploy();
+      await expect(hub.connect(user).upgradeTo(newHubImpl.address)).to.be.reverted;
+    });
+    it("Should reject upgrade to non-UUPS contract", async function () {
+      const { hub, testContract } = await loadFixture(deployFixture);
+      await expect(hub.upgradeTo(testContract.address)).to.be.reverted;
+    });
+  });
   describe("Drone", function () {
     it("Should be able to deploy drone", async function () {
       const { hub, operator, user } = await loadFixture(deployFixture);
@@ -105,6 +132,36 @@ describe("GrinderyNexus", function () {
       const hubOperator = hub.connect(operator);
       await hubOperator.deployDrone(user.address);
       await expect(hubOperator.deployDrone(user.address)).to.be.reverted;
+    });
+  });
+  describe("Drone Upgrade", function () {
+    it("Should be able to upgrade", async function () {
+      const { hub, user2, operator, GrinderyNexusDrone, testContract, droneBeacon, drone } = await loadFixture(
+        deployFixture
+      );
+      const hubOperator = hub.connect(operator);
+      expect(await droneBeacon.upgradeTo(testContract.address))
+        .to.emit(hub, "Upgraded")
+        .withArgs(testContract.address);
+
+      const callData = testContract.interface.encodeFunctionData("echo", ["0x1"]);
+      const nonce = 0;
+      const droneAddress = await hubOperator.getUserDroneAddress(user2.address);
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = await operator.signMessage(ethers.utils.arrayify(transactionHash));
+      await expect(hubOperator.deployDroneAndSendTransaction(user2.address, testContract.address, callData, signature))
+        .to.be.reverted;
+      const newDroneImpl = await GrinderyNexusDrone.deploy(hub.address);
+      expect(await droneBeacon.upgradeTo(newDroneImpl.address))
+        .to.emit(hub, "Upgraded")
+        .withArgs(newDroneImpl.address);
+      await expect(
+        hubOperator.deployDroneAndSendTransaction(user2.address, testContract.address, callData, signature)
+      ).to.emit(drone.attach(droneAddress), "TransactionResult");
+    });
+    it("Should reject upgrade by non-owner", async function () {
+      const { user, testContract, droneBeacon } = await loadFixture(deployFixture);
+      await expect(droneBeacon.connect(user).upgradeTo(testContract.address)).to.be.reverted;
     });
   });
   describe("Transaction", function () {
