@@ -154,6 +154,65 @@ describe("GrinderyNexus", function () {
         );
       expect(await droneInstance.getNextNonce()).to.equal("0x1");
     });
+    it("Should be able to reject transaction with invalid signature", async function () {
+      const { operator, testContract, hubOperator, droneAddress, droneInstance } = await loadFixture(
+        deployDroneFixture
+      );
+
+      const callData = testContract.interface.encodeFunctionData("echo", ["0x1"]);
+      const nonce = await droneInstance.getNextNonce();
+      expect(nonce).to.equal("0x0");
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = ethers.BigNumber.from(await operator.signMessage(ethers.utils.arrayify(transactionHash)))
+        .xor("0x100000000")
+        .toHexString();
+      const transaction = droneInstance.sendTransaction(testContract.address, nonce, callData, signature);
+      await expect(transaction).to.be.revertedWith("Invalid transaction signature");
+      expect(await droneInstance.getNextNonce()).to.equal("0x0");
+    });
+    it("Should be able to reject transaction with signature for another transaction", async function () {
+      const { operator, testContract, hubOperator, droneAddress, droneInstance } = await loadFixture(
+        deployDroneFixture
+      );
+
+      let callData = testContract.interface.encodeFunctionData("echo", ["0x0"]);
+      const nonce = await droneInstance.getNextNonce();
+      expect(nonce).to.equal("0x0");
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = await operator.signMessage(ethers.utils.arrayify(transactionHash));
+      callData = testContract.interface.encodeFunctionData("echo", ["0x1"]);
+      const transaction = droneInstance.sendTransaction(testContract.address, nonce, callData, signature);
+      await expect(transaction).to.be.revertedWith("Invalid transaction signature");
+      expect(await droneInstance.getNextNonce()).to.equal("0x0");
+    });
+    it("Should be able to reject transaction signed by non-operator", async function () {
+      const { user2, testContract, hubOperator, droneAddress, droneInstance } = await loadFixture(deployDroneFixture);
+
+      const callData = testContract.interface.encodeFunctionData("echo", ["0x1"]);
+      const nonce = await droneInstance.getNextNonce();
+      expect(nonce).to.equal("0x0");
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = await user2.signMessage(ethers.utils.arrayify(transactionHash));
+      const transaction = droneInstance.sendTransaction(testContract.address, nonce, callData, signature);
+      await expect(transaction).to.be.revertedWith("Invalid transaction signature");
+      expect(await droneInstance.getNextNonce()).to.equal("0x0");
+    });
+    it("Should be able to reject transaction signed for different drone", async function () {
+      const { user2, operator, testContract, hubOperator, droneAddress, droneInstance } = await loadFixture(
+        deployDroneFixture
+      );
+
+      await hubOperator.deployDrone(user2.address);
+      const droneInstance2 = droneInstance.attach(await hubOperator.getUserDroneAddress(user2.address));
+
+      const callData = testContract.interface.encodeFunctionData("echo", ["0x1"]);
+      const nonce = await droneInstance.getNextNonce();
+      expect(nonce).to.equal("0x0");
+      const transactionHash = await hubOperator.getTransactionHash(droneAddress, testContract.address, nonce, callData);
+      const signature = await operator.signMessage(ethers.utils.arrayify(transactionHash));
+      const transaction = droneInstance2.sendTransaction(testContract.address, nonce, callData, signature);
+      await expect(transaction).to.be.revertedWith("Invalid transaction signature");
+    });
     it("Should be able to handle revert from transaction", async function () {
       const { operator, testContract, hubOperator, droneAddress, droneInstance } = await loadFixture(
         deployDroneFixture
