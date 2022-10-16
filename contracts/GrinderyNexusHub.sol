@@ -42,12 +42,13 @@ contract GrinderyNexusHub is
     );
     event DeployedDrone(address indexed droneAddress);
 
-    constructor() {
-        initialize();
+    constructor(address owner) {
+        initialize(owner);
     }
 
-    function initialize() public initializer {
+    function initialize(address owner) public initializer {
         __Ownable2Step_init();
+        OwnableUpgradeable.transferOwnership(owner);
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner onlyProxy {}

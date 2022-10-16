@@ -1,35 +1,27 @@
-import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, deployments } from "hardhat";
 
 describe("GrinderyNexus", function () {
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshot in every test.
   async function deployFixture() {
+    await deployments.fixture();
     // Contracts are deployed using the first signer/account by default
     const [owner, operator, user, user2] = await ethers.getSigners();
 
     const GrinderyNexusHub = await ethers.getContractFactory("GrinderyNexusHub");
     const GrinderyNexusDrone = await ethers.getContractFactory("GrinderyNexusDrone");
+    const GrinderyNexusDroneBeacon = await ethers.getContractFactory("GrinderyNexusDroneBeacon");
     const TestContract = await ethers.getContractFactory("TestContract");
     const testContract = await TestContract.deploy();
 
-    const ERC1967Proxy = await ethers.getContractFactory("ERC1967Proxy");
-    const hubImpl = await GrinderyNexusHub.deploy();
-    const hubProxy = await ERC1967Proxy.deploy(hubImpl.address, hubImpl.interface.encodeFunctionData("initialize"));
-    const hub = hubImpl.attach(hubProxy.address);
+    const hub = GrinderyNexusHub.attach((await deployments.get("GrinderyNexusHub")).address);
 
-    const UpgradeableBeacon = await ethers.getContractFactory("UpgradeableBeacon");
-    const StaticBeaconProxy = await ethers.getContractFactory("StaticBeaconProxy");
-    const droneImpl = await GrinderyNexusDrone.deploy(hub.address);
-    const droneBeacon = await UpgradeableBeacon.deploy(droneImpl.address);
-    const droneProxy = await StaticBeaconProxy.deploy(droneBeacon.address);
-    const drone = droneImpl.attach(droneProxy.address);
-
-    await hub.setOperator(operator.address);
-    await hub.setDroneImplementation(drone.address);
+    const droneBeacon = GrinderyNexusDroneBeacon.attach((await deployments.get("GrinderyNexusDroneBeacon")).address);
+    const drone = GrinderyNexusDrone.attach((await deployments.get("GrinderyNexusDrone")).address);
 
     return {
       hub,
@@ -98,15 +90,15 @@ describe("GrinderyNexus", function () {
   });
   describe("Hub Upgrade", function () {
     it("Should be able to upgrade", async function () {
-      const { hub, GrinderyNexusHub } = await loadFixture(deployFixture);
-      const newHubImpl = await GrinderyNexusHub.deploy();
+      const { hub, GrinderyNexusHub, owner } = await loadFixture(deployFixture);
+      const newHubImpl = await GrinderyNexusHub.deploy(owner.address);
       expect(await hub.upgradeTo(newHubImpl.address))
         .to.emit(hub, "Upgraded")
         .withArgs(newHubImpl.address);
     });
     it("Should reject upgrade by non-owner", async function () {
       const { hub, user, GrinderyNexusHub } = await loadFixture(deployFixture);
-      const newHubImpl = await GrinderyNexusHub.deploy();
+      const newHubImpl = await GrinderyNexusHub.deploy(user.address);
       await expect(hub.connect(user).upgradeTo(newHubImpl.address)).to.be.reverted;
     });
     it("Should reject upgrade to non-UUPS contract", async function () {
