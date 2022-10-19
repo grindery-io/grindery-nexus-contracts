@@ -1,4 +1,5 @@
 import { ethers, Signer } from "ethers";
+import { DETERMINISTIC_DEPLOYMENT_KEY } from "../secrets";
 
 const nonce = 0;
 const gasPrice = process.env.GAS_PRICE || 100 * 10 ** 9;
@@ -9,7 +10,12 @@ const data = ethers.utils.arrayify(
   "0x604580600e600039806000f350fe7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
 );
 
-const signer = new ethers.Wallet(ethers.utils.keccak256(ethers.utils.toUtf8Bytes("TEST")));
+if (!DETERMINISTIC_DEPLOYMENT_KEY) {
+  console.warn("Using test key for deterministic deployment setup");
+}
+const signer = new ethers.Wallet(
+  DETERMINISTIC_DEPLOYMENT_KEY || ethers.utils.keccak256(ethers.utils.toUtf8Bytes("TEST"))
+);
 
 const signerAddress = signer.address;
 const contractAddress = ethers.utils.getContractAddress({ from: signerAddress, nonce });
