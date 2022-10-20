@@ -30,28 +30,34 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   }
   console.log(`Deploying deployment proxy...`);
   const signerWithProvider = signer.connect(owner.provider);
+  const gasPrice = (await owner.provider.getGasPrice()).mul(11).div(10);
+  const gasLimit = (await signerWithProvider.estimateGas({ data })).mul(11).div(10);
   const balance = await signerWithProvider.getBalance();
   if (balance.lte(funding)) {
     const amount = balance.mul(-1).add(funding);
     console.log(`Sending gas fund ${ethers.utils.formatEther(amount)} to ${signerAddress}`);
-    await owner.sendTransaction({
-      to: signerAddress,
-      value: amount,
-      chainId: await owner.getChainId(),
-    });
+    await (
+      await owner.sendTransaction({
+        to: signerAddress,
+        value: amount,
+        chainId: await owner.getChainId(),
+      })
+    ).wait();
   }
-  const tx = await signerWithProvider.sendTransaction({
-    nonce,
-    gasPrice,
-    gasLimit,
-    value,
-    data,
-    chainId: await owner.getChainId(),
-  });
+  const tx = await (
+    await signerWithProvider.sendTransaction({
+      nonce,
+      gasPrice,
+      gasLimit,
+      value,
+      data,
+      chainId: await owner.getChainId(),
+    })
+  ).wait();
   if ((await owner.provider.getCode(contractAddress).catch(() => "0x")) === "0x") {
     throw new Error("Failed to deploy deployment proxy to expected address");
   }
-  console.log(`Deployed deployment proxy at ${contractAddress} (tx: ${tx.hash})`);
+  console.log(`Deployed deployment proxy at ${contractAddress} (tx: ${tx.transactionHash})`);
 };
 
 export { signerAddress, contractAddress, funding };
