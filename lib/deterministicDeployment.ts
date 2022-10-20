@@ -29,9 +29,9 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   }
   console.log(`Deploying deployment proxy...`);
   const signerWithProvider = signer.connect(owner.provider);
-  const { maxFeePerGas, maxPriorityFeePerGas } = await getGasConfiguration(owner.provider);
+  const gasConf = await getGasConfiguration(owner.provider);
   const gasLimit = (await owner.provider.estimateGas({ data })).mul(13).div(10);
-  const funding = gasLimit.mul(maxFeePerGas);
+  const funding = gasLimit.mul("maxFeePerGas" in gasConf ? gasConf.maxFeePerGas : gasConf.gasPrice);
   const balance = await signerWithProvider.getBalance();
   if (balance.lt(funding)) {
     const amount = balance.mul(-1).add(funding);
@@ -40,8 +40,7 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
       await owner.sendTransaction({
         to: signerAddress,
         value: amount,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
+        ...gasConf,
         chainId: await owner.getChainId(),
       })
     ).wait();
@@ -49,8 +48,7 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   const tx = await (
     await signerWithProvider.sendTransaction({
       nonce,
-      maxFeePerGas,
-      maxPriorityFeePerGas,
+      ...gasConf,
       gasLimit,
       value,
       data,
