@@ -29,6 +29,10 @@ const config: HardhatUserConfig = {
       url: `https://rpc.ankr.com/polygon_mumbai`,
       accounts: [OWNER_KEY],
     },
+    chapel: {
+      url: `https://rpc.ankr.com/bsc_testnet_chapel`,
+      accounts: [OWNER_KEY],
+    },
   },
   solidity: {
     version: "0.8.17",
@@ -41,7 +45,8 @@ const config: HardhatUserConfig = {
   },
   namedAccounts: {
     owner: {
-      default: 0,
+      default: "0xbD4CAF9E8aBC11bFeBba6f12c408144621f76949",
+      31337: 0,
     },
     operator: {
       default: OPERATOR_ADDRESS || 1,

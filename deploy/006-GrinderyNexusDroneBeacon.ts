@@ -2,6 +2,7 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
 import { getGasConfiguration } from "../lib/gas";
+import { verifyContractAddress } from "../lib/verify";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments } = hre;
@@ -20,6 +21,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
+  verifyContractAddress(await hre.getChainId(),"DRONE_BEACON", result.address);
   await hre.upgrades.forceImport(result.address, await ethers.getContractFactory("GrinderyNexusDrone"), {
     kind: "beacon",
     ...{ constructorArgs: [stub.address] },

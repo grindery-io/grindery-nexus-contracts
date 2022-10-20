@@ -1,6 +1,7 @@
 import { ethers, Signer } from "ethers";
 import { DETERMINISTIC_DEPLOYMENT_KEY } from "../secrets";
 import { getGasConfiguration } from "./gas";
+import { verifyContractAddress } from "./verify";
 
 const nonce = 0;
 const value = 0;
@@ -22,6 +23,7 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   if (!owner.provider) {
     throw new Error("Provider is not available");
   }
+  verifyContractAddress(await owner.getChainId(), "DETERMINISTIC_DEPLOYMENT_PROXY", contractAddress);
   if ((await owner.provider.getCode(contractAddress).catch(() => "0x")) !== "0x") {
     return;
   }
