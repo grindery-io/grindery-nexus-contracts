@@ -31,7 +31,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   if ((await GrinderyNexusHub.getOperator()) !== operator) {
     console.log(`Setting operator of GrinderyNexusHub (${GrinderyNexusHub.address}) to ${operator}`);
-    await GrinderyNexusHub.setOperator(operator, await getGasConfiguration(hre.ethers.provider));
+    await GrinderyNexusHub.setOperator(operator, await getGasConfiguration(hre.ethers.provider)).then((tx) =>
+      tx.wait()
+    );
   }
 };
 func.tags = ["upgrade-GrinderyNexusHub"];
