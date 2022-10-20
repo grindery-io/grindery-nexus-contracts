@@ -25,6 +25,10 @@ const config: HardhatUserConfig = {
       url: `https://rpc.ankr.com/eth_goerli`,
       accounts: [OWNER_KEY],
     },
+    mumbai: {
+      url: `https://rpc.ankr.com/polygon_mumbai`,
+      accounts: [OWNER_KEY],
+    },
   },
   solidity: {
     version: "0.8.17",
