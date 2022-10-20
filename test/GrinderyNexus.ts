@@ -49,6 +49,7 @@ describe("GrinderyNexus", function () {
       expect(await hub.setOperator(user.address))
         .to.emit(hub, "OperatorChanged")
         .withArgs(operator.address, user.address);
+      expect(await hub.getOperator()).to.equal(user.address);
     });
     it("Should allow setting new drone implementation", async function () {
       const { hub, drone, GrinderyNexusDrone } = await loadFixture(deployFixture);
@@ -57,6 +58,7 @@ describe("GrinderyNexus", function () {
       expect(await hub.setDroneImplementation(newDrone.address))
         .to.emit(hub, "DroneImplementationChanged")
         .withArgs(drone.address, newDrone.address);
+      expect(await hub.getDroneImplementation()).to.equal(newDrone.address);
     });
     it("Should reject setting operator by non-owner", async function () {
       const { hub, user } = await loadFixture(deployFixture);
