@@ -8,6 +8,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = deployments;
   const { owner } = await getNamedAccounts();
   const hub = await deployments.get("GrinderyNexusHub");
+  hre.upgrades.silenceWarnings();
   await hre.upgrades.validateImplementation(await ethers.getContractFactory("GrinderyNexusDrone"), {
     kind: "beacon",
     unsafeAllow: ["constructor", "state-variable-immutable", "state-variable-assignment"],

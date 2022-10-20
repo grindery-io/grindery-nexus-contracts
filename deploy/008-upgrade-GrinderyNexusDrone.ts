@@ -9,6 +9,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const beacon = await deployments.get("GrinderyNexusDroneBeacon");
   const beaconInstance = (await ethers.getContractFactory("UpgradeableBeacon")).attach(beacon.address);
   const factory = await ethers.getContractFactory("GrinderyNexusDrone");
+  hre.upgrades.silenceWarnings();
   await hre.upgrades.validateUpgrade(beaconInstance.address, factory, {
     kind: "beacon",
     unsafeAllow: ["constructor", "state-variable-immutable", "state-variable-assignment"],
