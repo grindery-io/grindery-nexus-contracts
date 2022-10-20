@@ -92,15 +92,15 @@ describe("GrinderyNexus", function () {
   });
   describe("Hub Upgrade", function () {
     it("Should be able to upgrade", async function () {
-      const { hub, GrinderyNexusHub, owner } = await loadFixture(deployFixture);
-      const newHubImpl = await GrinderyNexusHub.deploy(owner.address);
+      const { hub, GrinderyNexusHub } = await loadFixture(deployFixture);
+      const newHubImpl = await GrinderyNexusHub.deploy();
       expect(await hub.upgradeTo(newHubImpl.address))
         .to.emit(hub, "Upgraded")
         .withArgs(newHubImpl.address);
     });
     it("Should reject upgrade by non-owner", async function () {
       const { hub, user, GrinderyNexusHub } = await loadFixture(deployFixture);
-      const newHubImpl = await GrinderyNexusHub.deploy(user.address);
+      const newHubImpl = await GrinderyNexusHub.deploy();
       await expect(hub.connect(user).upgradeTo(newHubImpl.address)).to.be.reverted;
     });
     it("Should reject upgrade to non-UUPS contract", async function () {

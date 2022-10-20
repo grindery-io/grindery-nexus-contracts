@@ -35,7 +35,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   await hre.upgrades.forceImport(GrinderyNexusHub.address, factory, {
     kind: "uups",
-    ...{ constructorArgs: [owner] },
   });
   return true;
 };

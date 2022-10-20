@@ -11,8 +11,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const GrinderyNexusHub = factory.attach(proxy.address);
   await hre.upgrades.validateUpgrade(proxy.address, factory, {
     kind: "uups",
-    unsafeAllow: ["constructor"],
-    ...{ constructorArgs: [owner] },
   });
   if (
     !ethers.BigNumber.from(

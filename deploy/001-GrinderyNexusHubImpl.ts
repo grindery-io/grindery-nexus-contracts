@@ -8,13 +8,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { owner } = await getNamedAccounts();
   await hre.upgrades.validateImplementation(await ethers.getContractFactory("GrinderyNexusHub"), {
     kind: "uups",
-    unsafeAllow: ["constructor"],
-    ...{ constructorArgs: [owner] },
   });
   await deploy("GrinderyNexusHubImpl", {
     contract: "GrinderyNexusHub",
     from: owner,
-    args: [owner],
     log: true,
     waitConfirmations: 1,
     gasPrice: await hre.ethers.provider.getGasPrice(),
