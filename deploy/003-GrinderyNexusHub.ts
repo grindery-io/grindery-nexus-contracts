@@ -1,6 +1,7 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
+import { getGasConfiguration } from "../lib/gas";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments } = hre;
@@ -18,7 +19,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusHub"))
     ),
     waitConfirmations: 1,
-    gasPrice: await hre.ethers.provider.getGasPrice(),
+    ...(await getGasConfiguration(hre.ethers.provider)),
   });
   const factory = await ethers.getContractFactory("GrinderyNexusHub");
   const GrinderyNexusHub = factory.attach(result.address);
@@ -26,9 +27,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await GrinderyNexusHub.upgradeToAndCall(
       impl.address,
       GrinderyNexusHub.interface.encodeFunctionData("initialize", [owner]),
-      {
-        gasPrice: await hre.ethers.provider.getGasPrice(),
-      }
+      await getGasConfiguration(hre.ethers.provider)
     ).then((x) => x.wait());
   } catch (e) {
     // The contract may be already deployed before, if it is in correct state, the next script should succeed

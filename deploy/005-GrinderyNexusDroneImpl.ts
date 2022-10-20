@@ -1,6 +1,7 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
+import { getGasConfiguration } from "../lib/gas";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments } = hre;
@@ -18,7 +19,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [hub.address],
     log: true,
     waitConfirmations: 1,
-    gasPrice: await hre.ethers.provider.getGasPrice(),
+    ...(await getGasConfiguration(hre.ethers.provider)),
   });
 };
 func.dependencies = ["GrinderyNexusHubImpl"];

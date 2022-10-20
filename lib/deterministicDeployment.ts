@@ -1,5 +1,6 @@
 import { ethers, Signer } from "ethers";
 import { DETERMINISTIC_DEPLOYMENT_KEY } from "../secrets";
+import { getGasConfiguration } from "./gas";
 
 const nonce = 0;
 const value = 0;
@@ -26,17 +27,19 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   }
   console.log(`Deploying deployment proxy...`);
   const signerWithProvider = signer.connect(owner.provider);
-  const gasPrice = (await owner.provider.getGasPrice()).mul(11).div(10);
-  const gasLimit = (await owner.provider.estimateGas({ data })).mul(11).div(10);
-  const funding = gasPrice.mul(gasLimit);
+  const { maxFeePerGas, maxPriorityFeePerGas } = await getGasConfiguration(owner.provider);
+  const gasLimit = (await owner.provider.estimateGas({ data })).mul(13).div(10);
+  const funding = gasLimit.mul(maxFeePerGas);
   const balance = await signerWithProvider.getBalance();
-  if (balance.lte(funding)) {
+  if (balance.lt(funding)) {
     const amount = balance.mul(-1).add(funding);
     console.log(`Sending gas fund ${ethers.utils.formatEther(amount)} to ${signerAddress}`);
     await (
       await owner.sendTransaction({
         to: signerAddress,
         value: amount,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
         chainId: await owner.getChainId(),
       })
     ).wait();
@@ -44,7 +47,8 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   const tx = await (
     await signerWithProvider.sendTransaction({
       nonce,
-      gasPrice,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
       gasLimit,
       value,
       data,

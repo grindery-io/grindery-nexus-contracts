@@ -1,6 +1,7 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
+import { getGasConfiguration } from "../lib/gas";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments } = hre;
@@ -17,15 +18,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusDrone"))
     ),
     waitConfirmations: 1,
-    gasPrice: await hre.ethers.provider.getGasPrice(),
+    ...(await getGasConfiguration(hre.ethers.provider)),
   });
   const GrinderyNexusHub = (await ethers.getContractFactory("GrinderyNexusHub")).attach(
     (await deployments.get("GrinderyNexusHub")).address
   );
   if ((await GrinderyNexusHub.getDroneImplementation()) !== result.address) {
-    await GrinderyNexusHub.setDroneImplementation(result.address, {
-      gasPrice: await hre.ethers.provider.getGasPrice(),
-    });
+    await GrinderyNexusHub.setDroneImplementation(result.address, await getGasConfiguration(hre.ethers.provider));
   }
   return true;
 };
