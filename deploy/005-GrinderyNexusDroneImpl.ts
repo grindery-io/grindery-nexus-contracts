@@ -11,6 +11,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     from: owner,
     args: [hub.address],
     log: true,
+    waitConfirmations: 1,
   });
 };
 func.dependencies = ["GrinderyNexusHubImpl"];

@@ -10,6 +10,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     from: owner,
     args: [owner],
     log: true,
+    waitConfirmations: 1,
   });
 };
 func.tags = ["GrinderyNexusHubImpl"];

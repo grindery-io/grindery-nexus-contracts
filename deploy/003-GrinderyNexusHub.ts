@@ -17,6 +17,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     deterministicDeployment: ethers.utils.keccak256(
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusHub"))
     ),
+    waitConfirmations: 1,
   });
   const GrinderyNexusHub = (await ethers.getContractFactory("GrinderyNexusHub")).attach(result.address);
   await GrinderyNexusHub.upgradeToAndCall(

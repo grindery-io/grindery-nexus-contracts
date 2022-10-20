@@ -13,6 +13,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [],
     log: true,
     deterministicDeployment: ethers.utils.keccak256(ethers.utils.arrayify(ethers.utils.toUtf8Bytes("ERC1967Stub"))),
+    waitConfirmations: 1,
   });
   return true;
 };
