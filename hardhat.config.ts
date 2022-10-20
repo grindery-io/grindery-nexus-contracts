@@ -3,7 +3,7 @@ import "@nomicfoundation/hardhat-toolbox";
 import "@openzeppelin/hardhat-upgrades";
 import "hardhat-deploy";
 import { ethers } from "ethers";
-import { signerAddress, contractAddress, funding } from "./lib/deterministicDeployment";
+import { signerAddress, contractAddress } from "./lib/deterministicDeployment";
 import { OPERATOR_ADDRESS, OWNER_KEY } from "./secrets";
 
 function randomKey(salt: string) {
@@ -48,7 +48,7 @@ const config: HardhatUserConfig = {
     return {
       factory: contractAddress,
       deployer: signerAddress,
-      funding,
+      funding: "0",
       signedTx: "0x0", // We will deploy from our own script
     };
   },

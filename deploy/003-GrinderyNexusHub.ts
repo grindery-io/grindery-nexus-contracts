@@ -5,7 +5,7 @@ import { ethers } from "hardhat";
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments } = hre;
   const { deploy } = deployments;
-  const { owner, operator } = await getNamedAccounts();
+  const { owner } = await getNamedAccounts();
   const stub = await deployments.get("ERC1967Stub");
   const impl = await deployments.get("GrinderyNexusHubImpl");
 
@@ -18,13 +18,22 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusHub"))
     ),
     waitConfirmations: 1,
+    gasPrice: await hre.ethers.provider.getGasPrice(),
   });
-  const GrinderyNexusHub = (await ethers.getContractFactory("GrinderyNexusHub")).attach(result.address);
-  await GrinderyNexusHub.upgradeToAndCall(
-    impl.address,
-    GrinderyNexusHub.interface.encodeFunctionData("initialize", [owner])
-  ).then((x) => x.wait());
-  await GrinderyNexusHub.setOperator(operator);
+  const factory = await ethers.getContractFactory("GrinderyNexusHub");
+  const GrinderyNexusHub = factory.attach(result.address);
+  try {
+    await GrinderyNexusHub.upgradeToAndCall(
+      impl.address,
+      GrinderyNexusHub.interface.encodeFunctionData("initialize", [owner])
+    ).then((x) => x.wait());
+  } catch (e) {
+    // The contract may be already deployed before, if it is in correct state, the next script should succeed
+  }
+  await hre.upgrades.forceImport(GrinderyNexusHub.address, factory, {
+    kind: "uups",
+    ...{ constructorArgs: [owner] },
+  });
   return true;
 };
 func.id = "GrinderyNexusHub";

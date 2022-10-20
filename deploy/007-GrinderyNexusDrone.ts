@@ -17,11 +17,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusDrone"))
     ),
     waitConfirmations: 1,
+    gasPrice: await hre.ethers.provider.getGasPrice(),
   });
   const GrinderyNexusHub = (await ethers.getContractFactory("GrinderyNexusHub")).attach(
     (await deployments.get("GrinderyNexusHub")).address
   );
-  await GrinderyNexusHub.setDroneImplementation(result.address);
+  if ((await GrinderyNexusHub.getDroneImplementation()) !== result.address) {
+    await GrinderyNexusHub.setDroneImplementation(result.address);
+  }
   return true;
 };
 func.id = "GrinderyNexusDrone";

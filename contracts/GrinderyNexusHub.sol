@@ -58,6 +58,10 @@ contract GrinderyNexusHub is
         operator = newOperator;
     }
 
+    function getOperator() public view onlyProxy returns (address) {
+        return operator;
+    }
+
     function setDroneImplementation(address newDroneImplementation)
         public
         onlyOwner
@@ -68,6 +72,10 @@ contract GrinderyNexusHub is
             newDroneImplementation
         );
         droneImplementation = newDroneImplementation;
+    }
+
+    function getDroneImplementation() public view onlyProxy returns (address) {
+        return droneImplementation;
     }
 
     function getUserDroneSalt(address user) internal pure returns (bytes32) {

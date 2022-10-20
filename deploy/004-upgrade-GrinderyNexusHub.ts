@@ -3,10 +3,17 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  const { deployments } = hre;
+  const { deployments, getNamedAccounts } = hre;
+  const { operator, owner } = await getNamedAccounts();
   const impl = await deployments.get("GrinderyNexusHubImpl");
   const proxy = await deployments.get("GrinderyNexusHub");
-  const GrinderyNexusHub = (await ethers.getContractFactory("GrinderyNexusHub")).attach(proxy.address);
+  const factory = await ethers.getContractFactory("GrinderyNexusHub");
+  const GrinderyNexusHub = factory.attach(proxy.address);
+  await hre.upgrades.validateUpgrade(proxy.address, factory, {
+    kind: "uups",
+    unsafeAllow: ["constructor"],
+    ...{ constructorArgs: [owner] },
+  });
   if (
     !ethers.BigNumber.from(
       await hre.ethers.provider.getStorageAt(
@@ -17,6 +24,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   ) {
     console.log(`Upgrading implementation of GrinderyNexusHub (${GrinderyNexusHub.address}) to ${impl.address}`);
     await GrinderyNexusHub.upgradeTo(impl.address).then((x) => x.wait());
+    await hre.upgrades.forceImport(GrinderyNexusHub.address, factory, {
+      kind: "uups",
+      ...{ constructorArgs: [owner] },
+    });
+  }
+  if ((await GrinderyNexusHub.getOperator()) !== operator) {
+    console.log(`Setting operator of GrinderyNexusHub (${GrinderyNexusHub.address}) to ${operator}`);
+    await GrinderyNexusHub.setOperator(operator);
   }
 };
 func.tags = ["upgrade-GrinderyNexusHub"];

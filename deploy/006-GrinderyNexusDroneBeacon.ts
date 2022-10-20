@@ -8,7 +8,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { owner } = await getNamedAccounts();
 
   const stub = await deployments.get("ERC1967Stub");
-  await deploy("GrinderyNexusDroneBeacon", {
+  const result = await deploy("GrinderyNexusDroneBeacon", {
     contract: "GrinderyNexusDroneBeacon",
     from: owner,
     args: [stub.address, owner],
@@ -17,6 +17,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusDroneBeacon"))
     ),
     waitConfirmations: 1,
+    gasPrice: await hre.ethers.provider.getGasPrice(),
+  });
+  await hre.upgrades.forceImport(result.address, await ethers.getContractFactory("GrinderyNexusDrone"), {
+    kind: "beacon",
+    ...{ constructorArgs: [stub.address] },
   });
   return true;
 };

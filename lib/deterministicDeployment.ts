@@ -2,9 +2,6 @@ import { ethers, Signer } from "ethers";
 import { DETERMINISTIC_DEPLOYMENT_KEY } from "../secrets";
 
 const nonce = 0;
-const gasPrice = process.env.GAS_PRICE || 100 * 10 ** 9;
-// actual gas costs last measure: 59159; we don't want to run too close though because gas costs can change in forks and we want our address to be retained
-const gasLimit = process.env.GAS_LIMIT || 100000;
 const value = 0;
 const data = ethers.utils.arrayify(
   "0x604580600e600039806000f350fe7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
@@ -19,7 +16,6 @@ const signer = new ethers.Wallet(
 
 const signerAddress = signer.address;
 const contractAddress = ethers.utils.getContractAddress({ from: signerAddress, nonce });
-const funding = ethers.BigNumber.from(gasLimit).mul(gasPrice).toHexString();
 
 export const ensureDeploymentProxy = async function (owner: Signer) {
   if (!owner.provider) {
@@ -31,7 +27,8 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   console.log(`Deploying deployment proxy...`);
   const signerWithProvider = signer.connect(owner.provider);
   const gasPrice = (await owner.provider.getGasPrice()).mul(11).div(10);
-  const gasLimit = (await signerWithProvider.estimateGas({ data })).mul(11).div(10);
+  const gasLimit = (await owner.provider.estimateGas({ data })).mul(11).div(10);
+  const funding = gasPrice.mul(gasLimit);
   const balance = await signerWithProvider.getBalance();
   if (balance.lte(funding)) {
     const amount = balance.mul(-1).add(funding);
@@ -60,4 +57,4 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   console.log(`Deployed deployment proxy at ${contractAddress} (tx: ${tx.transactionHash})`);
 };
 
-export { signerAddress, contractAddress, funding };
+export { signerAddress, contractAddress };
