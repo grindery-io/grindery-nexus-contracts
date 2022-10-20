@@ -25,7 +25,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   try {
     await GrinderyNexusHub.upgradeToAndCall(
       impl.address,
-      GrinderyNexusHub.interface.encodeFunctionData("initialize", [owner])
+      GrinderyNexusHub.interface.encodeFunctionData("initialize", [owner]),
+      {
+        gasPrice: await hre.ethers.provider.getGasPrice(),
+      }
     ).then((x) => x.wait());
   } catch (e) {
     // The contract may be already deployed before, if it is in correct state, the next script should succeed

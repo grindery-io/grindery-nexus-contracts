@@ -23,7 +23,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ).eq(impl.address)
   ) {
     console.log(`Upgrading implementation of GrinderyNexusHub (${GrinderyNexusHub.address}) to ${impl.address}`);
-    await GrinderyNexusHub.upgradeTo(impl.address).then((x) => x.wait());
+    await GrinderyNexusHub.upgradeTo(impl.address, {
+      gasPrice: await hre.ethers.provider.getGasPrice(),
+    }).then((x) => x.wait());
     await hre.upgrades.forceImport(GrinderyNexusHub.address, factory, {
       kind: "uups",
       ...{ constructorArgs: [owner] },
@@ -31,7 +33,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   if ((await GrinderyNexusHub.getOperator()) !== operator) {
     console.log(`Setting operator of GrinderyNexusHub (${GrinderyNexusHub.address}) to ${operator}`);
-    await GrinderyNexusHub.setOperator(operator);
+    await GrinderyNexusHub.setOperator(operator, {
+      gasPrice: await hre.ethers.provider.getGasPrice(),
+    });
   }
 };
 func.tags = ["upgrade-GrinderyNexusHub"];

@@ -17,7 +17,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     console.log(
       `Upgrading implementation of GrinderyNexusDrone (beacon: ${beaconInstance.address}) to ${impl.address}`
     );
-    await beaconInstance.upgradeTo(impl.address).then((x) => x.wait());
+    await beaconInstance
+      .upgradeTo(impl.address, {
+        gasPrice: await hre.ethers.provider.getGasPrice(),
+      })
+      .then((x) => x.wait());
     await hre.upgrades.forceImport(beaconInstance.address, factory, {
       kind: "beacon",
       ...{ constructorArgs: [impl.address] },

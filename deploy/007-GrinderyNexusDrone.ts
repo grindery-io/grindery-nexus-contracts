@@ -23,7 +23,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     (await deployments.get("GrinderyNexusHub")).address
   );
   if ((await GrinderyNexusHub.getDroneImplementation()) !== result.address) {
-    await GrinderyNexusHub.setDroneImplementation(result.address);
+    await GrinderyNexusHub.setDroneImplementation(result.address, {
+      gasPrice: await hre.ethers.provider.getGasPrice(),
+    });
   }
   return true;
 };
