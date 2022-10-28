@@ -6,6 +6,8 @@ import { ethers } from "ethers";
 import { signerAddress, contractAddress } from "./lib/deterministicDeployment";
 import { OPERATOR_ADDRESS, OWNER_KEY } from "./secrets";
 
+import "./tasks/refund"
+
 function randomKey(salt: string) {
   return ethers.utils.keccak256(ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyTestAccount" + salt)));
 }
@@ -31,6 +33,48 @@ const config: HardhatUserConfig = {
     },
     chapel: {
       url: `https://rpc.ankr.com/bsc_testnet_chapel`,
+      accounts: [OWNER_KEY],
+    },
+    polygon: {
+      live: true,
+      url: `https://rpc.ankr.com/polygon`,
+      accounts: [OWNER_KEY],
+    },
+    harmony: {
+      live: true,
+      url: `https://rpc.ankr.com/harmony`,
+      accounts: [OWNER_KEY],
+    },
+    celo: {
+      live: true,
+      url: `https://rpc.ankr.com/celo`,
+      accounts: [OWNER_KEY],
+    },
+    fantom: {
+      live: true,
+      url: `https://rpc.ankr.com/fantom`,
+      accounts: [OWNER_KEY],
+    },
+    gnosis: {
+      live: true,
+      url: `https://rpc.ankr.com/gnosis`,
+      accounts: [OWNER_KEY],
+    },
+    avalanche: {
+      live: true,
+      url: `https://rpc.ankr.com/avalanche`,
+      accounts: [OWNER_KEY],
+    },
+    bsc: {
+      url: `https://rpc.ankr.com/bsc`,
+      accounts: [OWNER_KEY],
+    },
+    eth: {
+      url: `https://rpc.ankr.com/eth`,
+      accounts: [OWNER_KEY],
+    },
+    arbitrum: {
+      url: `https://arb1.arbitrum.io/rpc`,
       accounts: [OWNER_KEY],
     },
   },

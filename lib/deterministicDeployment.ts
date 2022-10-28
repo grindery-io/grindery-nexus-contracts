@@ -19,10 +19,25 @@ const signer = new ethers.Wallet(
 const signerAddress = signer.address;
 const contractAddress = ethers.utils.getContractAddress({ from: signerAddress, nonce });
 
+// Workaround for Celo
+function patchProvider(provider: any) {
+  const originalBlockFormatter = provider.formatter._block;
+  provider.formatter._block = (value: any, format: any) => {
+    return originalBlockFormatter(
+      {
+        gasLimit: value.gasLimit || "0",
+        ...value,
+      },
+      format
+    );
+  };
+}
+
 export const ensureDeploymentProxy = async function (owner: Signer) {
   if (!owner.provider) {
     throw new Error("Provider is not available");
   }
+  patchProvider(owner.provider);
   verifyContractAddress(await owner.getChainId(), "DETERMINISTIC_DEPLOYMENT_PROXY", contractAddress);
   if ((await owner.provider.getCode(contractAddress).catch(() => "0x")) !== "0x") {
     return;
@@ -31,7 +46,7 @@ export const ensureDeploymentProxy = async function (owner: Signer) {
   const signerWithProvider = signer.connect(owner.provider);
   const gasConf = await getGasConfiguration(owner.provider);
   const gasLimit = (await owner.provider.estimateGas({ data })).mul(13).div(10);
-  const funding = gasLimit.mul("maxFeePerGas" in gasConf ? gasConf.maxFeePerGas : gasConf.gasPrice);
+  const funding = gasLimit.mul("maxFeePerGas" in gasConf ? gasConf.maxFeePerGas : gasConf.gasPrice.mul(11).div(10));
   const balance = await signerWithProvider.getBalance();
   if (balance.lt(funding)) {
     const amount = balance.mul(-1).add(funding);
