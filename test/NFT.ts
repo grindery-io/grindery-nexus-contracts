@@ -8,7 +8,7 @@ describe('Minting the token and returning it', () => {
         // Recipient address
         const account = "0x01Cd7A354C6FD07C061648A78E1ADa9ad7dfbDc0";
         // Getting the contract
-        const NFTContract = await ethers.getContractFactory("NFT");
+        const NFTContract = await ethers.getContractFactory("NFTMint");
         //Deploying the Contract
         const nftContract = await NFTContract.deploy();
 
