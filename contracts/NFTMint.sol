@@ -14,7 +14,7 @@ contract NFTMint is ERC721URIStorage, Ownable {
     constructor() ERC721("NFTMint", "NFT") {}
 
     function mintNFT(address recipient, string memory tokenURI)
-        public onlyOwner
+        public
         returns (uint256)
     {
         _tokenIds.increment();
