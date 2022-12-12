@@ -77,6 +77,10 @@ const config: HardhatUserConfig = {
       url: `https://arb1.arbitrum.io/rpc`,
       accounts: [OWNER_KEY],
     },
+    cronos: {
+      url: `https://evm.cronos.org`,
+      accounts: [OWNER_KEY],
+    },
   },
   solidity: {
     version: "0.8.17",
@@ -89,7 +93,7 @@ const config: HardhatUserConfig = {
   },
   namedAccounts: {
     owner: {
-      default: "0xB201fDd90b14cc930bEc2c4E9f432bC1CA5Ad7C5", //"0xbD4CAF9E8aBC11bFeBba6f12c408144621f76949",
+      default: "0xbD4CAF9E8aBC11bFeBba6f12c408144621f76949", //"0xB201fDd90b14cc930bEc2c4E9f432bC1CA5Ad7C5",
       31337: 0,
     },
     operator: {

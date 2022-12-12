@@ -16,7 +16,7 @@ export async function getGasConfiguration(provider: Provider): Promise<
   }
   let { maxFeePerGas, maxPriorityFeePerGas } = await provider.getFeeData();
   if (!maxFeePerGas || !maxPriorityFeePerGas) {
-    return { gasPrice: await provider.getGasPrice().then((x) => x.mul(13).div(10)) };
+    return { gasPrice: await provider.getGasPrice().then((x) => x.mul(40).div(10)) };
   }
   return {
     maxFeePerGas: BigNumber.from(maxFeePerGas),
