@@ -19,7 +19,7 @@ contract NFTMints is ERC1155 {
 
     constructor() public ERC1155("") {}
 
-    function minNFTs (uint _amount, bytes memory data, string memory _tokenUri) public {
+    function mintNFTs (uint _amount, bytes memory data, string memory _tokenUri) public {
          _tokenIds.increment();
         uint256 newItemId = _tokenIds.current();
         _mint(msg.sender, newItemId, _amount, data);
