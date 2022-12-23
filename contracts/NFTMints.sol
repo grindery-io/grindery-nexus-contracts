@@ -9,22 +9,21 @@ contract NFTMints is ERC1155 {
     Counters.Counter private _tokenIds;
 
     mapping(uint256 => string) private _tokenURIs;
-    event multiTokensMinted (
-        address indexed recipient,
-        uint256 indexed tokenId,
-        uint256 indexed amount,
-        string tokenUri
-        );
-    
+    address owner;
 
-    constructor() public ERC1155("") {}
+    constructor(address _owner) public ERC1155("") {
+        owner = _owner;
+    }
 
-    function mintNFTs (uint _amount, bytes memory data, string memory _tokenUri) public {
+    modifier onlyOwner () {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+    function mintNFTs (address _addr, string memory _tokenUri) public {
          _tokenIds.increment();
         uint256 newItemId = _tokenIds.current();
-        _mint(msg.sender, newItemId, _amount, data);
-        setTokenUri(newItemId, _tokenUri);
-        emit multiTokensMinted(msg.sender, newItemId, _amount, _tokenUri);
+        _mint(_addr, newItemId, 1, '');
+        setTokenUri(newItemId, _tokenUri, _addr);
     }
 
     function uri(uint256 tokenId) override public view returns (string memory){
@@ -32,8 +31,8 @@ contract NFTMints is ERC1155 {
     }
 
 
-    function setTokenUri(uint256 tokenId, string memory uri ) internal {
-        require(balanceOf(msg.sender, tokenId) > 0, "Tokens do not exists for this user");
+    function setTokenUri(uint256 tokenId, string memory uri, address _addr ) internal {
+        require(balanceOf(_addr, tokenId) > 0, "Tokens do not exists for this user");
         _tokenURIs[tokenId] = uri;
     }
 }
