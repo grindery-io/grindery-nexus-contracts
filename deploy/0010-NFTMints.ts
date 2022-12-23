@@ -11,15 +11,17 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   const { getNamedAccounts, deployments } = hre;
   const { deploy } = deployments;
   const { owner } = await getNamedAccounts();
+  const beacon = await deployments.get("NFTMints");
 
   await deploy("NFTMints", {
     contract: "NFTMints",
     from: owner,
+    args: [beacon.address],
     log: true,
     estimateGasExtra: 10000,
     waitConfirmations: 1,
     deterministicDeployment: ethers.utils.keccak256(
-      ethers.utils.arrayify(ethers.utils.toUtf8Bytes("NFTMint"))
+      ethers.utils.arrayify(ethers.utils.toUtf8Bytes("NFTMints"))
     ),
     ...(await getGasConfiguration(hre.ethers.provider)),
   });

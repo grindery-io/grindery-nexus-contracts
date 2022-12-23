@@ -19,7 +19,7 @@ contract NFTMints is ERC1155 {
         require(msg.sender == owner, "Not owner");
         _;
     }
-    function mintNFTs (address _addr, string memory _tokenUri) public {
+    function mintNFTs (address recipient, string memory _tokenUri) public {
          _tokenIds.increment();
         uint256 newItemId = _tokenIds.current();
         _mint(_addr, newItemId, 1, '');
