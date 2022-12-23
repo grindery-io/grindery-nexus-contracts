@@ -13,7 +13,7 @@ describe("Multi Token Contract", function () {
     })
 
     it("Should mint an nft with tokenId of '1' for user 1, and when quering it's token Uri, it should return the tokenUri, and show the balance of that nft as 1 for said user",async () => {
-        const mintedNft = await contract.minNfts(user1.address, 'token uri');
+        const mintedNft = await contract.mintNFTs(user1.address, 'token uri');
       const req = await mintedNft.wait()
       const metadata = await contract.uri(1);
       console.log('metadata', metadata)

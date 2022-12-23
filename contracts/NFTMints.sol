@@ -22,8 +22,8 @@ contract NFTMints is ERC1155 {
     function mintNFTs (address recipient, string memory _tokenUri) public {
          _tokenIds.increment();
         uint256 newItemId = _tokenIds.current();
-        _mint(_addr, newItemId, 1, '');
-        setTokenUri(newItemId, _tokenUri, _addr);
+        _mint(recipient, newItemId, 1, '');
+        setTokenUri(newItemId, _tokenUri, recipient);
     }
 
     function uri(uint256 tokenId) override public view returns (string memory){
@@ -31,8 +31,8 @@ contract NFTMints is ERC1155 {
     }
 
 
-    function setTokenUri(uint256 tokenId, string memory uri, address _addr ) internal {
-        require(balanceOf(_addr, tokenId) > 0, "Tokens do not exists for this user");
+    function setTokenUri(uint256 tokenId, string memory uri, address recipient ) internal {
+        require(balanceOf(recipient, tokenId) > 0, "Tokens do not exists for this user");
         _tokenURIs[tokenId] = uri;
     }
 }
