@@ -181,7 +181,7 @@
         }
       }
     },
-    "d15c3679bd004f7a62acbc3d79be5efe2ed678a6540d93ea2c2f5ebd6c3db626": {
+    "05c75df27ee48afa4e158956bf9fa3e5afcce54bdec44d5f0b74aec146efeeef": {
       "address": "0x38111328d49dba3A2f36dABEee17932B6A552520",
       "layout": {
         "solcVersion": "0.8.17",
@@ -303,7 +303,7 @@
             "label": "_tokenIds",
             "offset": 0,
             "slot": "351",
-            "type": "t_struct(Counter)4967_storage",
+            "type": "t_struct(Counter)2802_storage",
             "contract": "NFTMints",
             "src": "contracts/NFTMints.sol:11"
           },
@@ -369,7 +369,7 @@
             "label": "string",
             "numberOfBytes": "32"
           },
-          "t_struct(Counter)4967_storage": {
+          "t_struct(Counter)2802_storage": {
             "label": "struct Counters.Counter",
             "members": [
               {
@@ -390,7 +390,11 @@
             "numberOfBytes": "1"
           }
         }
-      }
+      },
+      "allAddresses": [
+        "0x38111328d49dba3A2f36dABEee17932B6A552520",
+        "0xf8481dcb0991f710B8B8ddBc2feaBe069419D558"
+      ]
     }
   }
 }

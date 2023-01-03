@@ -43,11 +43,13 @@ contract NFTMints is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, ER
         __Ownable2Step_init();
         OwnableUpgradeable.transferOwnership(__ERC1155_init);
     }
-    function mintNFTs (address recipient, string memory _tokenUri) public {
+    function mintNFTs (address recipient, string memory _tokenUri) public returns (uint256) {
          _tokenIds.increment();
         uint256 newItemId = _tokenIds.current();
         _mint(recipient, newItemId, 1, '');
         setTokenUri(newItemId, _tokenUri, recipient);
+
+        return newItemId;
     }
 
     function uri(uint256 tokenId) override public view returns (string memory){
