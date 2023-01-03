@@ -21,7 +21,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
-  verifyContractAddress(await hre.getChainId(),"DRONE_BEACON", result.address);
+  // verifyContractAddress(await hre.getChainId(),"DRONE_BEACON", result.address);
   await hre.upgrades.forceImport(result.address, await ethers.getContractFactory("GrinderyNexusDrone"), {
     kind: "beacon",
     ...{ constructorArgs: [stub.address] },

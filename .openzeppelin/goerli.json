@@ -2,13 +2,13 @@
   "manifestVersion": "3.2",
   "proxies": [
     {
-      "address": "0xC942DFb6cC8Aade0F54e57fe1eD4320411625F8B",
+      "address": "0x40BE328Ef8c494046e92ad0B02cD9650d2998944",
       "kind": "uups"
     }
   ],
   "impls": {
     "4f284257dd1dad36d2b14cf89e91f73cc415bf745aa5114a8b57e8ad35cff2f4": {
-      "address": "0x20b7FD2bB7F371c03AA61282DfB670a2685595E8",
+      "address": "0x048955E29F280A66EF4F300c61De39c163318C40",
       "layout": {
         "solcVersion": "0.8.17",
         "storage": [
@@ -130,8 +130,55 @@
         }
       }
     },
-    "0cb9aa310954dd12160253018f1eb844b4484a77a673b1d98800332ce7bdd294": {
-      "address": "0x4981eAe40d171CdFD7cDDa39d58F598b79bBe2f5",
+    "b1703919a4a4f522bd268fca6cb955636a927bf45cd3a66a5438bc3669996bb9": {
+      "address": "0xd064313efa875d689370b86dF2237cBa88bcC62E",
+      "layout": {
+        "solcVersion": "0.8.17",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:62",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:67"
+          },
+          {
+            "label": "nonce",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_uint256",
+            "contract": "GrinderyNexusDrone",
+            "src": "contracts/GrinderyNexusDrone.sol:19"
+          }
+        ],
+        "types": {
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        }
+      }
+    },
+    "f1358c441ae5202381d53e3c06d7d1af94cb8178600fa9e50c2b690f2371df2a": {
+      "address": "0xa9f804e3A6C900E38efcD53Ce5F04f9aaDCB1Df8",
       "layout": {
         "solcVersion": "0.8.17",
         "storage": [

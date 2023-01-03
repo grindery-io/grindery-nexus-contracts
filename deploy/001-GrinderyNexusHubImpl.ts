@@ -14,6 +14,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     contract: "GrinderyNexusHub",
     from: owner,
     log: true,
+    estimateGasExtra: 10000,
     waitConfirmations: 1,
     deterministicDeployment: ethers.utils.keccak256(
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusHubImpl"))

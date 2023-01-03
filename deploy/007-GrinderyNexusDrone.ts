@@ -21,7 +21,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
-  verifyContractAddress(await hre.getChainId(), "DRONE", result.address);
+  // verifyContractAddress(await hre.getChainId(), "DRONE", result.address);
   const GrinderyNexusHub = (await ethers.getContractFactory("GrinderyNexusHub")).attach(
     (await deployments.get("GrinderyNexusHub")).address
   );

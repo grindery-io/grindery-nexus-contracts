@@ -1,23 +1,47 @@
-// contracts/GameItems.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
-contract NFTMints is ERC1155 {
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+contract NFTMints is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, ERC1155Upgradeable {
      using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
+    address private operator;
 
     mapping(uint256 => string) private _tokenURIs;
-    address owner;
+    // address owner;
 
-    constructor(address _owner) public ERC1155("") {
-        owner = _owner;
+    // constructor(address _owner) public ERC1155Upgradeable("") {
+    //     owner = _owner;
+    // }
+
+    // modifier onlyOwner () override virtual {
+    //     require(msg.sender == owner, "Not owner");
+    //     _;
+    // }
+
+    event OperatorChanged(
+        address indexed oldOperator,
+        address indexed newOperator
+    );
+
+    function _authorizeUpgrade(address) internal override onlyOwner onlyProxy {}
+
+    function setOperator(address newOperator) public onlyOwner onlyProxy {
+        emit OperatorChanged(operator, newOperator);
+        operator = newOperator;
     }
 
-    modifier onlyOwner () {
-        require(msg.sender == owner, "Not owner");
-        _;
+    function getOperator() public view onlyProxy returns (address) {
+        return operator;
+    }
+
+    function initialize(address __ERC1155_init) public initializer {
+        __Ownable2Step_init();
+        OwnableUpgradeable.transferOwnership(__ERC1155_init);
     }
     function mintNFTs (address recipient, string memory _tokenUri) public {
          _tokenIds.increment();
