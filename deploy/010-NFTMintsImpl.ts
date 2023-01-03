@@ -10,7 +10,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await hre.upgrades.validateImplementation(await ethers.getContractFactory("NFTMints"), {
     kind: "uups",
   });
-  await deploy("ƒ", {
+  await deploy("NFTMintsImpl", {
     contract: "NFTMints",
     from: owner,
     log: true,

@@ -14,7 +14,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const result = await deploy("NFTMints", {
     contract: "ERC1967Proxy",
     from: owner,
-    // args: [stub.address, "0x"],
+    args: [stub.address, "0x"],
     log: true,
     deterministicDeployment: ethers.utils.keccak256(
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("NFTMints"))
