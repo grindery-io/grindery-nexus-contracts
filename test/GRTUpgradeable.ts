@@ -14,12 +14,12 @@ describe("GRT Token contract", function () {
     	await grtUpgradeable.deployed();
         /* Returning the contract factory and the contract instance. */
 		return {
-          GRTUpgradeable,
-          grtUpgradeable,
-          owner,
-          user1,
-          user2,
-          user3,
+			GRTUpgradeable,
+			grtUpgradeable,
+			owner,
+			user1,
+			user2,
+			user3,
         };
     }
 
