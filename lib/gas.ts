@@ -10,7 +10,7 @@ export async function getGasConfiguration(provider: Provider): Promise<
 > {
   if ((await provider.getNetwork()).chainId === 42161) {
     return {
-      maxFeePerGas: BigNumber.from(ethers.utils.parseUnits("0.11", "gwei")),
+      maxFeePerGas: BigNumber.from(ethers.utils.parseUnits("10.11", "gwei")),
       maxPriorityFeePerGas: BigNumber.from(0),
     };
   }
@@ -20,6 +20,6 @@ export async function getGasConfiguration(provider: Provider): Promise<
   }
   return {
     maxFeePerGas: BigNumber.from(maxFeePerGas),
-    maxPriorityFeePerGas: BigNumber.from(maxPriorityFeePerGas),
+    maxPriorityFeePerGas: BigNumber.from(maxPriorityFeePerGas).add(ethers.utils.parseUnits("80", "gwei")),
   };
 }
