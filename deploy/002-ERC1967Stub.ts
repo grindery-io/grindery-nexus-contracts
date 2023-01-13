@@ -13,6 +13,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     from: owner,
     args: [],
     log: true,
+    // estimateGasExtra: 10000,
     deterministicDeployment: ethers.utils.keccak256(ethers.utils.arrayify(ethers.utils.toUtf8Bytes("ERC1967Stub"))),
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),

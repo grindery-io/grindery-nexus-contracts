@@ -22,6 +22,7 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       accounts: TEST_ACCOUNTS,
+      // allowUnlimitedContractSize: true
     },
     goerli: {
       // url: `https://rpc.ankr.com/eth_goerli`,
