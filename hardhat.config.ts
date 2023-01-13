@@ -84,6 +84,7 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
+    // Do not change any compiler setting
     version: "0.8.17",
     settings: {
       optimizer: {

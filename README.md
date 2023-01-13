@@ -11,3 +11,7 @@ REPORT_GAS=true npx hardhat test
 npx hardhat node
 npx hardhat deploy
 ```
+
+# Notes
+
+Please do not upgrade `@openzeppelin/contracts` and `@openzeppelin/contracts-upgradeable` to any other version, and do not change solidity settings in `hardhat.config.ts`. We need these to stay exactly the same to get stable contract address.
