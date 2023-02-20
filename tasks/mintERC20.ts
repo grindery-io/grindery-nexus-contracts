@@ -5,8 +5,8 @@ task("setFirstMintERC20", "Set first ERC20 mint")
     .setAction(async (taskArgs, hre) => {
     const { getNamedAccounts, ethers } = hre;
     const { owner } = await getNamedAccounts();
-    const funToken = await ethers.getContractAt('GRTUpgradeable', taskArgs.address);
-    const tx = await funToken.mint(owner, 10);
+    const grtToken = await ethers.getContractAt('GRTUpgradeable', taskArgs.address);
+    const tx = await grtToken.mint(owner, 10);
     await tx.wait();
     console.log("tx", tx);
 });

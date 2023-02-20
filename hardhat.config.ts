@@ -7,7 +7,7 @@ import { signerAddress, contractAddress } from "./lib/deterministicDeployment";
 import { OPERATOR_ADDRESS, OWNER_KEY, BSCSCAN_KEY } from "./secrets";
 import "@nomiclabs/hardhat-etherscan";
 import "./tasks/refund";
-import "./tasks/transferERC20";
+import "./tasks/mintERC20";
 
 function randomKey(salt: string) {
   return ethers.utils.keccak256(ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyTestAccount" + salt)));
