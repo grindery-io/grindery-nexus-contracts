@@ -593,10 +593,10 @@
   "resolved" "https://registry.npmjs.org/@nomiclabs/hardhat-ethers/-/hardhat-ethers-2.2.1.tgz"
   "version" "2.2.1"
 
-"@nomiclabs/hardhat-etherscan@^3.0.0", "@nomiclabs/hardhat-etherscan@^3.1.0", "@nomiclabs/hardhat-etherscan@^3.1.4":
-  "integrity" "sha512-fw8JCfukf6MdIGoySRmSftlM2wBgoaSbWQZgiYfD/KTeaSFEWCdMpuPZcLSBXtwtnQyyWDs07Lo7fL8HSqtD2Q=="
-  "resolved" "https://registry.npmjs.org/@nomiclabs/hardhat-etherscan/-/hardhat-etherscan-3.1.4.tgz"
-  "version" "3.1.4"
+"@nomiclabs/hardhat-etherscan@^3.0.0", "@nomiclabs/hardhat-etherscan@^3.1.0", "@nomiclabs/hardhat-etherscan@^3.1.6":
+  "integrity" "sha512-5WFIZeLLgWPiCJqm/4ie7UNXn7FXfzYmqnKwOKU2MLETGolzY1cueSYUTww/P8f+Zc9xfJLmzqSYcGLW/3j/IQ=="
+  "resolved" "https://registry.npmjs.org/@nomiclabs/hardhat-etherscan/-/hardhat-etherscan-3.1.6.tgz"
+  "version" "3.1.6"
   dependencies:
     "@ethersproject/abi" "^5.1.2"
     "@ethersproject/address" "^5.0.2"
@@ -607,7 +607,7 @@
     "lodash" "^4.17.11"
     "semver" "^6.3.0"
     "table" "^6.8.0"
-    "undici" "^5.4.0"
+    "undici" "^5.14.0"
 
 "@openzeppelin/contracts-upgradeable@^4.8.0":
   "integrity" "sha512-5GeFgqMiDlqGT8EdORadp1ntGF0qzWZLmEY7Wbp/yVhN7/B3NNzCxujuI77ktlyG81N3CUZP8cZe3ZAQ/cW10w=="
@@ -4616,10 +4616,10 @@
     "has-symbols" "^1.0.3"
     "which-boxed-primitive" "^1.0.2"
 
-"undici@^5.4.0":
-  "integrity" "sha512-oWjWJHzFet0Ow4YZBkyiJwiK5vWqEYoH7BINzJAJOLedZ++JpAlCbUktW2GQ2DS2FpKmxD/JMtWUUWl1BtghGw=="
-  "resolved" "https://registry.npmjs.org/undici/-/undici-5.11.0.tgz"
-  "version" "5.11.0"
+"undici@^5.14.0", "undici@^5.4.0":
+  "integrity" "sha512-J3j60dYzuo6Eevbawwp1sdg16k5Tf768bxYK4TUJRH7cBM4kFCbf3mOnM/0E3vQYXvpxITbbWmBafaDbxLDz3g=="
+  "resolved" "https://registry.npmjs.org/undici/-/undici-5.20.0.tgz"
+  "version" "5.20.0"
   dependencies:
     "busboy" "^1.6.0"
 

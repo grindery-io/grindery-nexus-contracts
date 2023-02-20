@@ -4,9 +4,10 @@ import "@openzeppelin/hardhat-upgrades";
 import "hardhat-deploy";
 import { ethers } from "ethers";
 import { signerAddress, contractAddress } from "./lib/deterministicDeployment";
-import { OPERATOR_ADDRESS, OWNER_KEY } from "./secrets";
-
-import "./tasks/refund"
+import { OPERATOR_ADDRESS, OWNER_KEY, BSCSCAN_KEY } from "./secrets";
+import "@nomiclabs/hardhat-etherscan";
+import "./tasks/refund";
+import "./tasks/transferERC20";
 
 function randomKey(salt: string) {
   return ethers.utils.keccak256(ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyTestAccount" + salt)));
@@ -70,6 +71,10 @@ const config: HardhatUserConfig = {
       url: `https://rpc.ankr.com/bsc`,
       accounts: [OWNER_KEY],
     },
+    bscTestnet: {
+      url: `https://rpc.ankr.com/bsc_testnet_chapel`,
+      accounts: [OWNER_KEY],
+    },
     eth: {
       url: `https://rpc.ankr.com/eth`,
       accounts: [OWNER_KEY],
@@ -82,6 +87,15 @@ const config: HardhatUserConfig = {
       url: `https://evm.cronos.org`,
       accounts: [OWNER_KEY],
     },
+    cronostestnet: {
+      url: `https://evm-t3.cronos.org/`,
+      accounts: [OWNER_KEY],
+    },
+  },
+  etherscan: {
+    apiKey: {
+      bscTestnet: BSCSCAN_KEY!
+    }
   },
   solidity: {
     version: "0.8.17",
@@ -94,8 +108,9 @@ const config: HardhatUserConfig = {
   },
   namedAccounts: {
     owner: {
-      default: "0xbD4CAF9E8aBC11bFeBba6f12c408144621f76949",
+      // default: "0xbD4CAF9E8aBC11bFeBba6f12c408144621f76949",
       // default: "0xB201fDd90b14cc930bEc2c4E9f432bC1CA5Ad7C5",
+      default: "0x710f35C7c7CEC6B4f80D63ED506c356160eB58d1",
       31337: 0,
     },
     operator: {

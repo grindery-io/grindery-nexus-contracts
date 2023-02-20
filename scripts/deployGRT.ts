@@ -8,6 +8,9 @@ async function main() {
     // Start deployment, returning a promise that resolves to a contract object
     const grtUpgradeable = await upgrades.deployProxy(GRTUpgradeable);
     await grtUpgradeable.deployed();
+
+    // await grtUpgradeable.initialize();
+
     console.log("Contract deployed to address:", grtUpgradeable.address);
     console.log("Name of the token:", await grtUpgradeable.name());
     console.log("Symbol of the token:", await grtUpgradeable.symbol());
