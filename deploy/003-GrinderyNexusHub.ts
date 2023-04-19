@@ -24,15 +24,25 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   });
   verifyContractAddress(await hre.getChainId(), "HUB", result.address);
   const factory = await ethers.getContractFactory("GrinderyNexusHub");
-  const GrinderyNexusHub = factory.attach(result.address);
-  try {
-    await GrinderyNexusHub.upgradeToAndCall(
-      impl.address,
-      GrinderyNexusHub.interface.encodeFunctionData("initialize", [owner]),
-      await getGasConfiguration(hre.ethers.provider)
-    ).then((x) => x.wait());
-  } catch (e) {
-    // The contract may be already deployed before, if it is in correct state, the next script should succeed
+  const GrinderyNexusHub = factory.attach(result.address).connect(await hre.ethers.getSigner(owner));
+  if ((await GrinderyNexusHub.owner()) === "0x0000000000000000000000000000000000000000") {
+    if (
+      ethers.BigNumber.from(
+        await hre.ethers.provider.getStorageAt(
+          result.address,
+          "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+        )
+      ).eq(impl.address)
+    ) {
+      console.log("Calling initialize only");
+      await GrinderyNexusHub.initialize(owner).then((x) => x.wait());
+    } else {
+      await GrinderyNexusHub.upgradeToAndCall(
+        impl.address,
+        GrinderyNexusHub.interface.encodeFunctionData("initialize", [owner]),
+        await getGasConfiguration(hre.ethers.provider)
+      ).then((x) => x.wait());
+    }
   }
   await hre.upgrades.forceImport(GrinderyNexusHub.address, factory, {
     kind: "uups",

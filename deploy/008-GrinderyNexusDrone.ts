@@ -23,9 +23,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   });
   verifyContractAddress(await hre.getChainId(), "DRONE", result.address);
 
-  const GrinderyNexusHub = (await ethers.getContractFactory("GrinderyNexusHub")).attach(
-    (await deployments.get("GrinderyNexusHub")).address
-  );
+  const GrinderyNexusHub = (await ethers.getContractFactory("GrinderyNexusHub"))
+    .attach((await deployments.get("GrinderyNexusHub")).address)
+    .connect(await hre.ethers.getSigner(owner));
   if ((await GrinderyNexusHub.getDroneImplementation()) !== result.address) {
     await GrinderyNexusHub.setDroneImplementation(result.address, await getGasConfiguration(hre.ethers.provider)).then(
       (tx) => tx.wait()

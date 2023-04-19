@@ -5,11 +5,11 @@ import { getGasConfiguration } from "../lib/gas";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments, getNamedAccounts } = hre;
-  const { operator } = await getNamedAccounts();
+  const { operator, owner } = await getNamedAccounts();
   const impl = await deployments.get("GrinderyNexusHubImpl");
   const proxy = await deployments.get("GrinderyNexusHub");
   const factory = await ethers.getContractFactory("GrinderyNexusHub");
-  const GrinderyNexusHub = factory.attach(proxy.address);
+  const GrinderyNexusHub = factory.attach(proxy.address).connect(await hre.ethers.getSigner(owner));
   await hre.upgrades.validateUpgrade(proxy.address, factory, {
     kind: "uups",
   });
@@ -30,6 +30,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     });
   }
   if ((await GrinderyNexusHub.getOperator()) !== operator) {
+    console.log(await GrinderyNexusHub.pendingOwner());
     console.log(`Setting operator of GrinderyNexusHub (${GrinderyNexusHub.address}) to ${operator}`);
     await GrinderyNexusHub.setOperator(operator, await getGasConfiguration(hre.ethers.provider)).then((tx) =>
       tx.wait()
