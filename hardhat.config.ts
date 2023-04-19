@@ -1,12 +1,18 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@openzeppelin/hardhat-upgrades";
+
+import { OPERATOR_ADDRESS, OWNER_KMS_KEY_PATH, OWNER_KEY } from "./secrets";
+import { registerSigner } from "./lib/gcpSigner";
+const OWNER_ADDRESS = "0xf63263803A272eB2fA7Ff1C16f9F0F381c8b4272";
+registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
+
 import "hardhat-deploy";
 import { ethers } from "ethers";
 import { signerAddress, contractAddress } from "./lib/deterministicDeployment";
-import { OPERATOR_ADDRESS, OWNER_KEY } from "./secrets";
 
-import "./tasks/refund"
+import "./tasks/refund";
+import "./tasks/switchOwner";
 
 function randomKey(salt: string) {
   return ethers.utils.keccak256(ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyTestAccount" + salt)));
@@ -25,6 +31,10 @@ const config: HardhatUserConfig = {
     },
     goerli: {
       url: `https://rpc.ankr.com/eth_goerli`,
+      accounts: [OWNER_KEY],
+    },
+    sepolia: {
+      url: `https://rpc.ankr.com/eth_sepolia`,
       accounts: [OWNER_KEY],
     },
     mumbai: {
@@ -66,15 +76,23 @@ const config: HardhatUserConfig = {
       accounts: [OWNER_KEY],
     },
     bsc: {
+      live: true,
       url: `https://rpc.ankr.com/bsc`,
       accounts: [OWNER_KEY],
     },
     eth: {
+      live: true,
       url: `https://rpc.ankr.com/eth`,
       accounts: [OWNER_KEY],
     },
     arbitrum: {
+      live: true,
       url: `https://arb1.arbitrum.io/rpc`,
+      accounts: [OWNER_KEY],
+    },
+    cronos: {
+      live: true,
+      url: `https://evm.cronos.org`,
       accounts: [OWNER_KEY],
     },
   },
@@ -89,8 +107,11 @@ const config: HardhatUserConfig = {
   },
   namedAccounts: {
     owner: {
-      default: "0xbD4CAF9E8aBC11bFeBba6f12c408144621f76949",
+      default: OWNER_ADDRESS,
       31337: 0,
+    },
+    ownerOld: {
+      default: "0xbD4CAF9E8aBC11bFeBba6f12c408144621f76949",
     },
     operator: {
       default: OPERATOR_ADDRESS || 1,

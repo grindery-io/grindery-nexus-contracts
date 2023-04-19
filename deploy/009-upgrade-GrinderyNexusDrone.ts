@@ -4,10 +4,13 @@ import { ethers } from "hardhat";
 import { getGasConfiguration } from "../lib/gas";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  const { deployments } = hre;
+  const { deployments, getNamedAccounts } = hre;
+  const { owner } = await getNamedAccounts();
   const impl = await deployments.get("GrinderyNexusDroneImpl");
   const beacon = await deployments.get("GrinderyNexusDroneBeacon");
-  const beaconInstance = (await ethers.getContractFactory("UpgradeableBeacon")).attach(beacon.address);
+  const beaconInstance = (await ethers.getContractFactory("UpgradeableBeacon"))
+    .attach(beacon.address)
+    .connect(await hre.ethers.getSigner(owner));
   const factory = await ethers.getContractFactory("GrinderyNexusDrone");
   hre.upgrades.silenceWarnings();
   await hre.upgrades.validateUpgrade(beaconInstance.address, factory, {

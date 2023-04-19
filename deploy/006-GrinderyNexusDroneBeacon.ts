@@ -7,13 +7,13 @@ import { verifyContractAddress } from "../lib/verify";
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments } = hre;
   const { deploy } = deployments;
-  const { owner } = await getNamedAccounts();
+  const { owner, ownerOld } = await getNamedAccounts();
 
   const stub = await deployments.get("ERC1967Stub");
   const result = await deploy("GrinderyNexusDroneBeacon", {
     contract: "GrinderyNexusDroneBeacon",
     from: owner,
-    args: [stub.address, owner],
+    args: [stub.address, ownerOld], // Do not change the owner, this is required for deterministic deployment
     log: true,
     deterministicDeployment: ethers.utils.keccak256(
       ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusDroneBeacon"))
@@ -21,7 +21,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
-  verifyContractAddress(await hre.getChainId(),"DRONE_BEACON", result.address);
+  verifyContractAddress(await hre.getChainId(), "DRONE_BEACON", result.address);
   await hre.upgrades.forceImport(result.address, await ethers.getContractFactory("GrinderyNexusDrone"), {
     kind: "beacon",
     ...{ constructorArgs: [stub.address] },

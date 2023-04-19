@@ -5,9 +5,16 @@ const EXPECTED_ADDRESSES = {
   DRONE_BEACON: "0x6c0C5B7B7cc6bB8BD7D94844acF1214cE20aAF5E",
 };
 
-export function verifyContractAddress(chainId: number | string, type: keyof typeof EXPECTED_ADDRESSES, address: string) {
+export function verifyContractAddress(
+  chainId: number | string,
+  type: keyof typeof EXPECTED_ADDRESSES,
+  address: string
+) {
   if (chainId.toString() === "31337") {
     // Hardhat chain
+    return;
+  }
+  if (process.env.DEV) {
     return;
   }
   if (address !== EXPECTED_ADDRESSES[type]) {

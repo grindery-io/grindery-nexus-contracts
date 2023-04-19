@@ -16,10 +16,10 @@ export async function getGasConfiguration(provider: Provider): Promise<
   }
   let { maxFeePerGas, maxPriorityFeePerGas } = await provider.getFeeData();
   if (!maxFeePerGas || !maxPriorityFeePerGas) {
-    return { gasPrice: await provider.getGasPrice().then((x) => x.mul(13).div(10)) };
+    return { gasPrice: await provider.getGasPrice().then((x) => x.mul(15).div(10)) };
   }
   return {
-    maxFeePerGas: BigNumber.from(maxFeePerGas),
-    maxPriorityFeePerGas: BigNumber.from(maxPriorityFeePerGas),
+    maxFeePerGas: BigNumber.from(maxFeePerGas).add(ethers.utils.parseUnits("20", "gwei")),
+    maxPriorityFeePerGas: BigNumber.from(maxPriorityFeePerGas).add(ethers.utils.parseUnits("10", "gwei")),
   };
 }

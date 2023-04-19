@@ -11,5 +11,5 @@ artifacts
 
 .vscode
 deployments
-.openzeppelin/unknown-31337.json
-.openzeppelin/polygon-mumbai.json
+.openzeppelin/
+.env.dev
