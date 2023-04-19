@@ -65,6 +65,10 @@ const config: HardhatUserConfig = {
       url: `https://rpc.ankr.com/fantom`,
       accounts: [OWNER_KEY],
     },
+    fantom_testnet: {
+      url: `https://rpc.testnet.fantom.network/`,
+      accounts: [OWNER_KEY],
+    },
     gnosis: {
       live: true,
       url: `https://rpc.ankr.com/gnosis`,
@@ -93,6 +97,10 @@ const config: HardhatUserConfig = {
     cronos: {
       live: true,
       url: `https://evm.cronos.org`,
+      accounts: [OWNER_KEY],
+    },
+    polygon_zkevm_testnet: {
+      url: `https://rpc.ankr.com/polygon_zkevm_testnet`,
       accounts: [OWNER_KEY],
     },
   },
