@@ -12,6 +12,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if ((await GrinderyNexusDroneBeacon.owner()) !== ownerOld) {
     return;
   }
+  console.log(`Setting owner of beacon contract to ${owner}`);
   const ownerSigner = await hre.ethers.getSigner(owner);
   const ownerOldSigner = await hre.ethers.getSigner(ownerOld);
   const gas = (await GrinderyNexusDroneBeacon.connect(ownerOld).estimateGas.transferOwnership(owner)).mul(12).div(10);
