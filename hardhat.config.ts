@@ -2,9 +2,8 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@openzeppelin/hardhat-upgrades";
 
-import { OPERATOR_ADDRESS, OWNER_KMS_KEY_PATH, OWNER_KEY } from "./secrets";
+import { OPERATOR_ADDRESS, OWNER_KMS_KEY_PATH, OWNER_OLD_KEY, OWNER_ADDRESS } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
-const OWNER_ADDRESS = "0xf63263803A272eB2fA7Ff1C16f9F0F381c8b4272";
 registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
 
 import "hardhat-deploy";
@@ -31,77 +30,77 @@ const config: HardhatUserConfig = {
     },
     goerli: {
       url: `https://rpc.ankr.com/eth_goerli`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     sepolia: {
       url: `https://rpc.ankr.com/eth_sepolia`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     mumbai: {
       url: `https://rpc.ankr.com/polygon_mumbai`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     chapel: {
       url: `https://rpc.ankr.com/bsc_testnet_chapel`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     polygon: {
       live: true,
       url: `https://rpc.ankr.com/polygon`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     harmony: {
       live: true,
       url: `https://rpc.ankr.com/harmony`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     celo: {
       live: true,
       url: `https://rpc.ankr.com/celo`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     fantom: {
       live: true,
       url: `https://rpc.ankr.com/fantom`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     fantom_testnet: {
       url: `https://rpc.testnet.fantom.network/`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     gnosis: {
       live: true,
       url: `https://rpc.ankr.com/gnosis`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     avalanche: {
       live: true,
       url: `https://rpc.ankr.com/avalanche`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     bsc: {
       live: true,
       url: `https://rpc.ankr.com/bsc`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     eth: {
       live: true,
       url: `https://rpc.ankr.com/eth`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     arbitrum: {
       live: true,
       url: `https://arb1.arbitrum.io/rpc`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     cronos: {
       live: true,
       url: `https://evm.cronos.org`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
     polygon_zkevm_testnet: {
       url: `https://rpc.ankr.com/polygon_zkevm_testnet`,
-      accounts: [OWNER_KEY],
+      accounts: [OWNER_OLD_KEY],
     },
   },
   solidity: {
