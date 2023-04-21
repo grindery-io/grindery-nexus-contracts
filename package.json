@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "putenv": "gsutil cp .env gs://grindery-nexus-contracts-a13707e9-1e78-4349-bee9-1e53f7378c2d/.env",
-    "getenv": "if [ -f .env ]; then echo '.env already exists, delete it first if you want to fetch it again'; exit 1; fi; gsutil cp gs://grindery-nexus-contracts-a13707e9-1e78-4349-bee9-1e53f7378c2d/.env .env;",
+    "env:put": "gsutil cp .env gs://grindery-nexus-contracts-a13707e9-1e78-4349-bee9-1e53f7378c2d/.env",
+    "env:get": "if [ -f .env ]; then echo '.env already exists, delete it first if you want to fetch it again'; exit 1; fi; gsutil cp gs://grindery-nexus-contracts-a13707e9-1e78-4349-bee9-1e53f7378c2d/.env .env;",
     "build": "npx hardhat compile",
     "test": "npx hardhat test"
   },
