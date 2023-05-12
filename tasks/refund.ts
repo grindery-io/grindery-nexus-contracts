@@ -14,5 +14,5 @@ task("refund", "Send all remaining fund from deployer account to operator accoun
   const fee = ("maxFeePerGas" in gasConf ? gasConf.maxFeePerGas : gasConf.gasPrice).mul(21000);
   const amount = balance.sub(fee);
   console.log(`Sending ${ethers.utils.formatEther(amount.toString())} to ${operator}...`);
-  await signer.sendTransaction({ to: operator, value: amount, ...gasConf }).then(tx => tx.wait());
+  await signer.sendTransaction({ to: operator, value: amount, gasLimit: 21000, ...gasConf }).then((tx) => tx.wait());
 });

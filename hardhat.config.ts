@@ -102,6 +102,14 @@ const config: HardhatUserConfig = {
       url: `https://rpc.ankr.com/polygon_zkevm_testnet`,
       accounts: [OWNER_OLD_KEY],
     },
+    celo_alfajores: {
+      url: `https://alfajores-forno.celo-testnet.org`,
+      accounts: [OWNER_OLD_KEY],
+    },
+    evmos_testnet: {
+      url: `https://eth.bd.evmos.dev:8545`,
+      accounts: [OWNER_OLD_KEY],
+    },
   },
   solidity: {
     version: "0.8.17",

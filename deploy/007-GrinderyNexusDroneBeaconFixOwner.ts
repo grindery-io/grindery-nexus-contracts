@@ -15,7 +15,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log(`Setting owner of beacon contract to ${owner}`);
   const ownerSigner = await hre.ethers.getSigner(owner);
   const ownerOldSigner = await hre.ethers.getSigner(ownerOld);
-  const gas = (await GrinderyNexusDroneBeacon.connect(ownerOld).estimateGas.transferOwnership(owner)).mul(12).div(10);
+  const txGas = await GrinderyNexusDroneBeacon.connect(ownerOld).estimateGas.transferOwnership(owner);
+  const gas = txGas.mul(15).div(10);
   const gasConf = await getGasConfiguration(hre.ethers.provider);
   const gasPrice = "maxFeePerGas" in gasConf ? gasConf.maxFeePerGas : gasConf.gasPrice;
   const gasFee = gas.mul(gasPrice);
@@ -24,6 +25,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   await GrinderyNexusDroneBeacon.connect(ownerOldSigner)
     .transferOwnership(owner, {
+      gasLimit: txGas,
       ...(await getGasConfiguration(hre.ethers.provider)),
     })
     .then((x) => x.wait());
