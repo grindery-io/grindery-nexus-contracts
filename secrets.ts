@@ -5,10 +5,8 @@ if (process.env.DEV) {
   config({ path: ".env.dev", override: true });
 }
 
-const OWNER_OLD_KEY = process.env.OWNER_OLD_KEY || "";
-const OPERATOR_ADDRESS = process.env.OPERATOR_ADDRESS || "";
 const DETERMINISTIC_DEPLOYMENT_KEY = process.env.DETERMINISTIC_DEPLOYMENT_KEY || "";
 const OWNER_KMS_KEY_PATH = process.env.OWNER_KMS_KEY_PATH || "";
 const OWNER_ADDRESS = process.env.OWNER_ADDRESS || "";
 
-export { OWNER_OLD_KEY, OPERATOR_ADDRESS, DETERMINISTIC_DEPLOYMENT_KEY, OWNER_KMS_KEY_PATH, OWNER_ADDRESS };
+export { DETERMINISTIC_DEPLOYMENT_KEY, OWNER_KMS_KEY_PATH, OWNER_ADDRESS };
