@@ -1,25 +1,27 @@
-import { Provider } from "@ethersproject/abstract-provider";
-import { BigNumber, ethers } from "ethers";
+import { Provider, ethers } from "ethers";
 
 export async function getGasConfiguration(provider: Provider): Promise<
   | {
-      maxFeePerGas: BigNumber;
-      maxPriorityFeePerGas: BigNumber;
+      maxFeePerGas: string;
+      maxPriorityFeePerGas: string;
     }
-  | { gasPrice: BigNumber }
+  | { gasPrice: string }
 > {
-  if ((await provider.getNetwork()).chainId === 42161) {
+  if ((await provider.getNetwork()).chainId === 42161n) {
     return {
-      maxFeePerGas: BigNumber.from(ethers.utils.parseUnits("0.11", "gwei")),
-      maxPriorityFeePerGas: BigNumber.from(0),
+      maxFeePerGas: ethers.parseUnits("0.11", "gwei").toString(),
+      maxPriorityFeePerGas: "0",
     };
   }
-  let { maxFeePerGas, maxPriorityFeePerGas } = await provider.getFeeData();
+  let { maxFeePerGas, maxPriorityFeePerGas, gasPrice } = await provider.getFeeData();
   if (!maxFeePerGas || !maxPriorityFeePerGas) {
-    return { gasPrice: await provider.getGasPrice().then((x) => x.mul(15).div(10)) };
+    if (!gasPrice) {
+      throw new Error("No gas price");
+    }
+    return { gasPrice: gasPrice.toString() };
   }
   return {
-    maxFeePerGas: BigNumber.from(maxFeePerGas).add(ethers.utils.parseUnits("20", "gwei")),
-    maxPriorityFeePerGas: BigNumber.from(maxPriorityFeePerGas).add(ethers.utils.parseUnits("10", "gwei")),
+    maxFeePerGas: (maxFeePerGas + ethers.parseUnits("20", "gwei")).toString(),
+    maxPriorityFeePerGas: (maxPriorityFeePerGas + ethers.parseUnits("10", "gwei")).toString(),
   };
 }

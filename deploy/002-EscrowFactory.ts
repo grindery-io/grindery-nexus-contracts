@@ -7,19 +7,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments } = hre;
   const { deploy } = deployments;
   const { owner } = await getNamedAccounts();
-  await hre.upgrades.validateImplementation(await ethers.getContractFactory("GrinderyNexusHub"), {
-    kind: "uups",
-  });
-  await deploy("GrinderyNexusHubImpl", {
-    contract: "GrinderyNexusHub",
+  const Escrow = await deployments.get("Escrow");
+  await deploy("EscrowFactory", {
+    contract: "EscrowFactory",
+    args: [Escrow.address],
     from: owner,
     log: true,
+    estimateGasExtra: 10000,
     waitConfirmations: 1,
-    deterministicDeployment: ethers.utils.keccak256(
-      ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyNexusHubImpl"))
-    ),
+    deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes("EscrowFactory"))),
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
 };
-func.tags = ["GrinderyNexusHubImpl"];
+func.tags = ["EscrowFactory"];
 export default func;

@@ -7,19 +7,15 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments } = hre;
   const { deploy } = deployments;
   const { owner } = await getNamedAccounts();
-
-  await deploy("ERC1967Stub", {
-    contract: "ERC1967Stub",
+  await deploy("Escrow", {
+    contract: "Escrow",
     from: owner,
-    args: [],
     log: true,
-    deterministicDeployment: ethers.utils.keccak256(ethers.utils.arrayify(ethers.utils.toUtf8Bytes("ERC1967Stub"))),
+    estimateGasExtra: 10000,
     waitConfirmations: 1,
+    deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes("Escrow"))),
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
-  return true;
 };
-func.id = "ERC1967Stub";
-func.tags = ["ERC1967Stub"];
-func.dependencies = ["DeterministicDeploymentProxy"];
+func.tags = ["Escrow"];
 export default func;

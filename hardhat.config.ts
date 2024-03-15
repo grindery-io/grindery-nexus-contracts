@@ -1,6 +1,5 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-import "@openzeppelin/hardhat-upgrades";
 
 import { OPERATOR_ADDRESS, OWNER_KMS_KEY_PATH, OWNER_OLD_KEY, OWNER_ADDRESS } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
@@ -11,15 +10,15 @@ import { ethers } from "ethers";
 import { signerAddress, contractAddress } from "./lib/deterministicDeployment";
 
 import "./tasks/refund";
-import "./tasks/switchOwner";
+import "./tasks/signMessage";
 
 function randomKey(salt: string) {
-  return ethers.utils.keccak256(ethers.utils.arrayify(ethers.utils.toUtf8Bytes("GrinderyTestAccount" + salt)));
+  return ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes("GrinderyTestAccount" + salt)));
 }
 const TEST_ACCOUNTS = Array(10)
   .fill(0)
   .map((_, index) => ({
-    balance: ethers.utils.parseEther("10000").toString(),
+    balance: ethers.parseEther("10000").toString(),
     privateKey: randomKey(index.toString()),
   }));
 
@@ -39,6 +38,11 @@ const config: HardhatUserConfig = {
     mumbai: {
       url: `https://rpc.ankr.com/polygon_mumbai`,
       accounts: [OWNER_OLD_KEY],
+      verify: {
+        etherscan: {
+          apiUrl: "https://mumbai.polygonscan.com",
+        },
+      },
     },
     chapel: {
       url: `https://rpc.ankr.com/bsc_testnet_chapel`,
@@ -48,6 +52,11 @@ const config: HardhatUserConfig = {
       live: true,
       url: `https://rpc.ankr.com/polygon`,
       accounts: [OWNER_OLD_KEY],
+      verify: {
+        etherscan: {
+          apiUrl: "https://polygonscan.com",
+        },
+      },
     },
     harmony: {
       live: true,
@@ -98,6 +107,10 @@ const config: HardhatUserConfig = {
       url: `https://evm.cronos.org`,
       accounts: [OWNER_OLD_KEY],
     },
+    cronos_testnet: {
+      url: `https://evm-t3.cronos.org`,
+      accounts: [OWNER_OLD_KEY],
+    },
     polygon_zkevm_testnet: {
       url: `https://rpc.ankr.com/polygon_zkevm_testnet`,
       accounts: [OWNER_OLD_KEY],
@@ -112,11 +125,11 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
-    version: "0.8.17",
+    version: "0.8.24",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 1000,
+        runs: 1000000,
       },
     },
   },
