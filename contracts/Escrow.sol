@@ -5,8 +5,9 @@ pragma solidity 0.8.24;
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./OnlyProxy.sol";
 
-contract Escrow is ReentrancyGuard, Initializable {
+contract Escrow is ReentrancyGuard, Initializable, OnlyProxy {
     enum State {
         Open,
         Closed,
@@ -43,17 +44,13 @@ contract Escrow is ReentrancyGuard, Initializable {
     error OnlySenderCanDispute();
     error OnlyAdminCanResolveDispute();
     error OnlyPossibleToTransferToSenderOrBeneficiary();
-    error UnauthorizedCallContext();
 
-    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    address private immutable __self = address(this);
-
-    IERC20 private _token;
+    IERC20 public _token;
     address public _sender;
     address public _beneficiary;
-    address private _admin;
-    uint256 private _holdDeadline;
-    State private _state;
+    address public _admin;
+    uint256 public _holdDeadline;
+    State public _state;
 
     function initialize(
         address tokenAddress,
@@ -133,21 +130,5 @@ contract Escrow is ReentrancyGuard, Initializable {
                 ? CloseReason.AdminRelease
                 : CloseReason.AdminRefund
         );
-    }
-
-    /**
-     * @dev Check that the execution is being performed through a delegatecall call and that the execution context is
-     * a proxy contract with an implementation (as defined in ERC1967) pointing to self. This should only be the case
-     * for UUPS and transparent proxies that are using the current contract as their implementation. Execution of a
-     * function through ERC1167 minimal proxies (clones) would not normally pass this test, but is not guaranteed to
-     * fail.
-     */
-    modifier onlyProxy() {
-        if (
-            address(this) == __self // Must be called through delegatecall
-        ) {
-            revert UnauthorizedCallContext();
-        }
-        _;
     }
 }

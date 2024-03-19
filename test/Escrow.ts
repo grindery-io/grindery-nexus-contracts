@@ -37,7 +37,7 @@ describe("Escrow", function () {
       .then((x) => x.wait());
 
     const salt = ethers.hexlify(ethers.randomBytes(32));
-    const escrowAddress = await escrowFactory.getEscrowAddress(salt);
+    const escrowAddress = await escrowFactory.getEscrowAddress(salt, sender, beneficiary);
     const holdSeconds = 3600;
     const holdDeadline = BigInt(Math.floor(Date.now() / 1000) + holdSeconds);
     const escrow = Escrow.attach(escrowAddress) as Escrow;
@@ -530,7 +530,9 @@ describe("Escrow", function () {
   });
   describe("EscrowByDelegateCall", function () {
     it("Should work", async function () {
-      const { testErc20, escrowFactory, owner, beneficiary, Escrow, holdDeadline } = await loadFixture(deployFixture);
+      const { testErc20, escrowFactory, owner, beneficiary, Escrow, holdDeadline, salt } = await loadFixture(
+        deployFixture
+      );
 
       const TestProxy = await ethers.getContractFactory("TestProxy");
       const testProxy = await TestProxy.deploy(escrowFactory.getAddress());
@@ -541,16 +543,20 @@ describe("Escrow", function () {
         .transfer(sender, 111n)
         .then((x) => x.wait());
 
-      const receipt = await (escrowFactory.attach(sender) as EscrowFactory)
-        .createEscrowByDelegateCall(testErc20.getAddress(), 111n, beneficiary, owner, holdDeadline)
-        .then((x) => x.wait());
-      const fragment = Escrow.attach(sender).getEvent("Open").fragment;
-      const event = receipt?.logs.find((x) => x.topics[0] === fragment.topicHash);
-      const escrowAddress = event?.address!;
+      const escrowAddress = await escrowFactory.getEscrowAddress(salt, sender, beneficiary);
       const escrow = Escrow.attach(escrowAddress) as Escrow;
-      expect(event).to.satisfies((x: any) => !!x);
-      const log = escrow.interface.decodeEventLog(fragment, event?.data!, event?.topics!);
-      expect(log).to.eql([await testErc20.getAddress(), sender, await beneficiary.getAddress(), 111n, holdDeadline]);
+      await expect(
+        (escrowFactory.attach(sender) as EscrowFactory).createEscrowByDelegateCall(
+          salt,
+          testErc20.getAddress(),
+          111n,
+          beneficiary,
+          owner,
+          holdDeadline
+        )
+      )
+        .to.emit(escrow, "Open")
+        .withArgs(await testErc20.getAddress(), sender, beneficiary, 111n, holdDeadline);
       expect(await testErc20.balanceOf(escrowAddress)).to.equal(111n);
       expect(await escrow._sender()).to.be.equal(sender);
       expect(await escrow._beneficiary()).to.be.equal(beneficiary);

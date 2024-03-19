@@ -5,8 +5,9 @@ pragma solidity 0.8.24;
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "./Escrow.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./OnlyProxy.sol";
 
-contract EscrowFactory {
+contract EscrowFactory is OnlyProxy {
     address private immutable _escrowImpl;
 
     constructor(address escrowImpl) {
@@ -21,7 +22,12 @@ contract EscrowFactory {
         address admin,
         uint256 holdDeadline
     ) public returns (Escrow) {
-        Escrow escrow = Escrow(Clones.cloneDeterministic(_escrowImpl, salt));
+        Escrow escrow = Escrow(
+            Clones.cloneDeterministic(
+                _escrowImpl,
+                getFinalSalt(salt, sender, beneficiary)
+            )
+        );
         escrow.initialize(
             tokenAddress,
             sender,
@@ -32,36 +38,40 @@ contract EscrowFactory {
         return escrow;
     }
 
-    function getEscrowAddress(bytes32 salt) public view returns (address) {
-        return Clones.predictDeterministicAddress(_escrowImpl, salt);
+    function getFinalSalt(
+        bytes32 salt,
+        address sender,
+        address beneficiary
+    ) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(salt, sender, beneficiary));
+    }
+
+    function getEscrowAddress(
+        bytes32 salt,
+        address sender,
+        address beneficiary
+    ) public view returns (address) {
+        return
+            Clones.predictDeterministicAddress(
+                _escrowImpl,
+                getFinalSalt(salt, sender, beneficiary),
+                __self
+            );
     }
 
     function createEscrowByDelegateCall(
+        bytes32 salt,
         address tokenAddress,
         uint256 amount,
         address beneficiary,
         address admin,
         uint256 holdDeadline
-    ) external returns (Escrow) {
+    ) external onlyProxy returns (Escrow) {
         address sender = address(this);
-        bytes32 salt = keccak256(
-            abi.encode(
-                block.timestamp,
-                blockhash(block.number - 1),
-                block.prevrandao,
-                block.coinbase,
-                tokenAddress,
-                amount,
-                sender,
-                beneficiary,
-                admin,
-                holdDeadline
-            )
-        );
-        address escrowAddress = getEscrowAddress(salt);
+        address escrowAddress = getEscrowAddress(salt, sender, beneficiary);
         IERC20(tokenAddress).approve(escrowAddress, amount);
         return
-            createEscrow(
+            EscrowFactory(__self).createEscrow(
                 salt,
                 tokenAddress,
                 sender,

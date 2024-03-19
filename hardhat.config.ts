@@ -1,7 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 
-import { OPERATOR_ADDRESS, OWNER_KMS_KEY_PATH, OWNER_OLD_KEY, OWNER_ADDRESS } from "./secrets";
+import { OPERATOR_ADDRESS, OWNER_KMS_KEY_PATH, OWNER_OLD_KEY, OWNER_ADDRESS, POLYGONSCAN_API_KEY } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
 registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
 
@@ -40,7 +40,7 @@ const config: HardhatUserConfig = {
       accounts: [OWNER_OLD_KEY],
       verify: {
         etherscan: {
-          apiUrl: "https://mumbai.polygonscan.com",
+          apiKey: POLYGONSCAN_API_KEY,
         },
       },
     },
@@ -54,7 +54,7 @@ const config: HardhatUserConfig = {
       accounts: [OWNER_OLD_KEY],
       verify: {
         etherscan: {
-          apiUrl: "https://polygonscan.com",
+          apiKey: POLYGONSCAN_API_KEY,
         },
       },
     },
