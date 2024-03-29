@@ -1,13 +1,11 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { ethers, deployments } from "hardhat";
 import { Escrow, EscrowFactory } from "../typechain-types";
-import { assert } from "ethers";
 
 enum CloseReason {
   Release,
-  ReleaseExpired,
+  RefundExpired,
   Refund,
   AdminRelease,
   AdminRefund,
@@ -80,6 +78,7 @@ describe("Escrow", function () {
         .withArgs(sender, beneficiary, 111n, BigInt(CloseReason.Release))
         .and.to.emit(testErc20, "Transfer")
         .withArgs(escrowAddress, beneficiary, 111n);
+      expect(await escrow._closeReason()).to.equal(BigInt(CloseReason.Release));
     });
     it("Should revert when sender doesn't have any fund", async function () {
       const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, salt, holdDeadline } = await loadFixture(
@@ -139,18 +138,9 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(owner).release()).to.be.revertedWithCustomError(
-        escrow,
-        "OnlySenderCanReleaseWithinHoldingPeriod"
-      );
-      await expect(escrow.connect(beneficiary).release()).to.be.revertedWithCustomError(
-        escrow,
-        "OnlySenderCanReleaseWithinHoldingPeriod"
-      );
-      await expect(escrow.connect(otherUser).release()).to.be.revertedWithCustomError(
-        escrow,
-        "OnlySenderCanReleaseWithinHoldingPeriod"
-      );
+      await expect(escrow.connect(owner).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+      await expect(escrow.connect(beneficiary).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+      await expect(escrow.connect(otherUser).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
     });
     it("Should only allow one release call", async function () {
       const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
@@ -168,7 +158,7 @@ describe("Escrow", function () {
       await expect(escrow.connect(sender).release()).to.emit(escrow, "Close");
       await expect(escrow.connect(sender).release()).to.be.revertedWithCustomError(escrow, "InvalidState");
     });
-    it("Should only allow beneficiary to release fund after hold time", async function () {
+    it("Should not allow beneficiary to release fund after hold time", async function () {
       const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
         await loadFixture(deployFixture);
 
@@ -182,16 +172,35 @@ describe("Escrow", function () {
       ).to.emit(escrow, "Open");
 
       await time.increaseTo(holdDeadline - 1n);
-      await expect(escrow.connect(beneficiary).release()).to.be.revertedWithCustomError(
+      await expect(escrow.connect(beneficiary).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+      await time.increase(2);
+      await expect(escrow.connect(beneficiary).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+    });
+    it("Should allow sender to claim the fund back after hold time", async function () {
+      const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
+        await loadFixture(deployFixture);
+
+      await testErc20
+        .connect(sender)
+        .approve(escrowAddress, 111n)
+        .then((x) => x.wait());
+
+      await expect(
+        escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
+      ).to.emit(escrow, "Open");
+
+      await time.increaseTo(holdDeadline - 1n);
+      await expect(escrow.connect(sender).refund()).to.be.revertedWithCustomError(
         escrow,
-        "OnlySenderCanReleaseWithinHoldingPeriod"
+        "OnlyBeneficiaryCanTriggerRefund"
       );
       await time.increase(2);
-      await expect(escrow.connect(beneficiary).release())
+      await expect(escrow.connect(sender).refund())
         .to.emit(escrow, "Close")
-        .withArgs(sender, beneficiary, 111n, BigInt(CloseReason.ReleaseExpired))
+        .withArgs(sender, beneficiary, 111n, BigInt(CloseReason.RefundExpired))
         .and.to.emit(testErc20, "Transfer")
-        .withArgs(escrowAddress, beneficiary, 111n);
+        .withArgs(escrowAddress, sender, 111n);
+      expect(await escrow._closeReason()).to.equal(BigInt(CloseReason.RefundExpired));
     });
     it("Should allow beneficiary to trigger a refund", async function () {
       const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
@@ -211,6 +220,7 @@ describe("Escrow", function () {
         .withArgs(sender, beneficiary, 111n, BigInt(CloseReason.Refund))
         .and.to.emit(testErc20, "Transfer")
         .withArgs(escrowAddress, sender, 111n);
+      expect(await escrow._closeReason()).to.equal(BigInt(CloseReason.Refund));
     });
     it("Should allow beneficiary to trigger a refund even after holding period", async function () {
       const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
@@ -228,7 +238,7 @@ describe("Escrow", function () {
       await time.increaseTo(holdDeadline + 1n);
       await expect(escrow.connect(beneficiary).refund())
         .to.emit(escrow, "Close")
-        .withArgs(sender, beneficiary, 111n, BigInt(CloseReason.Refund))
+        .withArgs(sender, beneficiary, 111n, BigInt(CloseReason.RefundExpired))
         .and.to.emit(testErc20, "Transfer")
         .withArgs(escrowAddress, sender, 111n);
     });
@@ -267,37 +277,8 @@ describe("Escrow", function () {
         escrow,
         "OnlyBeneficiaryCanTriggerRefund"
       );
-      await time.increaseTo(holdDeadline + 1n);
-      await expect(escrow.connect(owner).refund()).to.be.revertedWithCustomError(
-        escrow,
-        "OnlyBeneficiaryCanTriggerRefund"
-      );
-      await expect(escrow.connect(sender).refund()).to.be.revertedWithCustomError(
-        escrow,
-        "OnlyBeneficiaryCanTriggerRefund"
-      );
-      await expect(escrow.connect(otherUser).refund()).to.be.revertedWithCustomError(
-        escrow,
-        "OnlyBeneficiaryCanTriggerRefund"
-      );
     });
-    it("Should not allow beneficiary to trigger refund after the fund has been released", async function () {
-      const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
-        await loadFixture(deployFixture);
-
-      await testErc20
-        .connect(sender)
-        .approve(escrowAddress, 111n)
-        .then((x) => x.wait());
-
-      await expect(
-        escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
-      ).to.emit(escrow, "Open");
-
-      await expect(escrow.connect(sender).release()).to.emit(escrow, "Close");
-      await expect(escrow.connect(beneficiary).refund()).to.be.revertedWithCustomError(escrow, "InvalidState");
-    });
-    it("Should allow only sender to dispute", async function () {
+    it("Should not allow anybody else to release fund", async function () {
       const {
         testErc20,
         escrowFactory,
@@ -320,10 +301,60 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(beneficiary).dispute()).to.be.revertedWithCustomError(escrow, "OnlySenderCanDispute");
-      await expect(escrow.connect(owner).dispute()).to.be.revertedWithCustomError(escrow, "OnlySenderCanDispute");
-      await expect(escrow.connect(otherUser).dispute()).to.be.revertedWithCustomError(escrow, "OnlySenderCanDispute");
-      await expect(escrow.connect(sender).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
+      await expect(escrow.connect(owner).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+      await expect(escrow.connect(beneficiary).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+      await expect(escrow.connect(otherUser).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+      await time.increaseTo(holdDeadline + 1n);
+      await expect(escrow.connect(owner).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+      await expect(escrow.connect(beneficiary).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+      await expect(escrow.connect(otherUser).release()).to.be.revertedWithCustomError(escrow, "OnlySenderCanRelease");
+    });
+    it("Should not allow beneficiary to trigger refund after the fund has been released", async function () {
+      const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
+        await loadFixture(deployFixture);
+
+      await testErc20
+        .connect(sender)
+        .approve(escrowAddress, 111n)
+        .then((x) => x.wait());
+
+      await expect(
+        escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
+      ).to.emit(escrow, "Open");
+
+      await expect(escrow.connect(sender).release()).to.emit(escrow, "Close");
+      await expect(escrow.connect(beneficiary).refund()).to.be.revertedWithCustomError(escrow, "InvalidState");
+    });
+    it("Should allow only beneficiary to dispute", async function () {
+      const {
+        testErc20,
+        escrowFactory,
+        owner,
+        sender,
+        beneficiary,
+        otherUser,
+        escrow,
+        escrowAddress,
+        salt,
+        holdDeadline,
+      } = await loadFixture(deployFixture);
+
+      await testErc20
+        .connect(sender)
+        .approve(escrowAddress, 111n)
+        .then((x) => x.wait());
+
+      await expect(
+        escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
+      ).to.emit(escrow, "Open");
+
+      await expect(escrow.connect(sender).dispute()).to.be.revertedWithCustomError(escrow, "OnlyBeneficiaryCanDispute");
+      await expect(escrow.connect(owner).dispute()).to.be.revertedWithCustomError(escrow, "OnlyBeneficiaryCanDispute");
+      await expect(escrow.connect(otherUser).dispute()).to.be.revertedWithCustomError(
+        escrow,
+        "OnlyBeneficiaryCanDispute"
+      );
+      await expect(escrow.connect(beneficiary).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
     });
     it("Should allow only one call to dispute", async function () {
       const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
@@ -338,8 +369,8 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(sender).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
-      await expect(escrow.connect(sender).dispute()).to.be.revertedWithCustomError(escrow, "InvalidState");
+      await expect(escrow.connect(beneficiary).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
+      await expect(escrow.connect(beneficiary).dispute()).to.be.revertedWithCustomError(escrow, "InvalidState");
     });
     it("Should disable normal release and refund when disputing", async function () {
       const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
@@ -354,7 +385,7 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(sender).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
+      await expect(escrow.connect(beneficiary).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
       await expect(escrow.connect(sender).release()).to.be.revertedWithCustomError(escrow, "InvalidState");
       await expect(escrow.connect(beneficiary).refund()).to.be.revertedWithCustomError(escrow, "InvalidState");
       await time.increaseTo(holdDeadline + 1n);
@@ -415,7 +446,7 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(sender).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
+      await expect(escrow.connect(beneficiary).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
       await expect(escrow.connect(sender).resolveDispute(sender)).to.be.revertedWithCustomError(
         escrow,
         "OnlyAdminCanResolveDispute"
@@ -446,12 +477,13 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(sender).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
+      await expect(escrow.connect(beneficiary).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
       await expect(escrow.connect(owner).resolveDispute(beneficiary))
         .to.emit(escrow, "Close")
         .withArgs(sender, beneficiary, 111n, BigInt(CloseReason.AdminRelease))
         .and.to.emit(testErc20, "Transfer")
         .withArgs(escrowAddress, beneficiary, 111n);
+      expect(await escrow._closeReason()).to.equal(BigInt(CloseReason.AdminRelease));
     });
     it("Should allow admin to resolve dispute by refunding sender", async function () {
       const { testErc20, escrowFactory, owner, sender, beneficiary, escrow, escrowAddress, salt, holdDeadline } =
@@ -466,12 +498,13 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(sender).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
+      await expect(escrow.connect(beneficiary).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
       await expect(escrow.connect(owner).resolveDispute(sender))
         .to.emit(escrow, "Close")
         .withArgs(sender, beneficiary, 111n, BigInt(CloseReason.AdminRefund))
         .and.to.emit(testErc20, "Transfer")
         .withArgs(escrowAddress, sender, 111n);
+      expect(await escrow._closeReason()).to.equal(BigInt(CloseReason.AdminRefund));
     });
     it("Should not allow admin resolve dispute by sending fund to elsewhere", async function () {
       const {
@@ -496,7 +529,7 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(sender).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
+      await expect(escrow.connect(beneficiary).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
       await expect(escrow.connect(owner).resolveDispute(owner)).to.be.revertedWithCustomError(
         escrow,
         "OnlyPossibleToTransferToSenderOrBeneficiary"
@@ -519,7 +552,7 @@ describe("Escrow", function () {
         escrowFactory.createEscrow(salt, testErc20.getAddress(), sender, beneficiary, owner, holdDeadline)
       ).to.emit(escrow, "Open");
 
-      await expect(escrow.connect(sender).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
+      await expect(escrow.connect(beneficiary).dispute()).to.emit(escrow, "Dispute").withArgs(sender, beneficiary);
       await expect(escrow.connect(owner).resolveDispute(beneficiary)).to.emit(escrow, "Close");
       await expect(escrow.connect(owner).resolveDispute(beneficiary)).to.be.revertedWithCustomError(
         escrow,

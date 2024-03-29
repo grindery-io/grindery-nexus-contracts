@@ -15,7 +15,7 @@ contract Escrow is ReentrancyGuard, Initializable, OnlyProxy {
     }
     enum CloseReason {
         Release,
-        ReleaseExpired,
+        RefundExpired,
         Refund,
         AdminRelease,
         AdminRefund
@@ -39,9 +39,9 @@ contract Escrow is ReentrancyGuard, Initializable, OnlyProxy {
     error HoldDeadlineMustBeInFuture();
     error NoApprovedFundFromSender();
     error InvalidState();
-    error OnlySenderCanReleaseWithinHoldingPeriod();
+    error OnlySenderCanRelease();
     error OnlyBeneficiaryCanTriggerRefund();
-    error OnlySenderCanDispute();
+    error OnlyBeneficiaryCanDispute();
     error OnlyAdminCanResolveDispute();
     error OnlyPossibleToTransferToSenderOrBeneficiary();
 
@@ -51,6 +51,7 @@ contract Escrow is ReentrancyGuard, Initializable, OnlyProxy {
     address public _admin;
     uint256 public _holdDeadline;
     State public _state;
+    CloseReason public _closeReason;
 
     function initialize(
         address tokenAddress,
@@ -86,33 +87,34 @@ contract Escrow is ReentrancyGuard, Initializable, OnlyProxy {
 
         _token.transfer(to, balance);
         _state = State.Closed;
+        _closeReason = reason;
         emit Close(_sender, _beneficiary, balance, reason);
     }
 
     function release() external onlyProxy nonReentrant {
         if (_state != State.Open) revert InvalidState();
         CloseReason reason = CloseReason.Release;
-        if (block.timestamp > _holdDeadline) {
-            reason = CloseReason.ReleaseExpired;
-        } else {
-            if (msg.sender != _sender)
-                revert OnlySenderCanReleaseWithinHoldingPeriod();
-        }
+        if (msg.sender != _sender) revert OnlySenderCanRelease();
 
         _transferFund(_beneficiary, reason);
     }
 
     function refund() external onlyProxy nonReentrant {
         if (_state != State.Open) revert InvalidState();
-        if (msg.sender != _beneficiary)
-            revert OnlyBeneficiaryCanTriggerRefund();
+        CloseReason reason = CloseReason.Refund;
+        if (block.timestamp > _holdDeadline) {
+            reason = CloseReason.RefundExpired;
+        } else {
+            if (msg.sender != _beneficiary)
+                revert OnlyBeneficiaryCanTriggerRefund();
+        }
 
-        _transferFund(_sender, CloseReason.Refund);
+        _transferFund(_sender, reason);
     }
 
     function dispute() external onlyProxy {
         if (_state != State.Open) revert InvalidState();
-        if (msg.sender != _sender) revert OnlySenderCanDispute();
+        if (msg.sender != _beneficiary) revert OnlyBeneficiaryCanDispute();
 
         _state = State.Dispute;
         emit Dispute(_sender, _beneficiary);
