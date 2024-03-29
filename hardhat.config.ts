@@ -40,6 +40,10 @@ const config: HardhatUserConfig = {
       url: `https://rpc.ankr.com/polygon_mumbai`,
       accounts: [OWNER_OLD_KEY],
     },
+    amoy: {
+      url: `https://rpc.ankr.com/polygon_amoy`,
+      accounts: [OWNER_OLD_KEY],
+    },
     chapel: {
       url: `https://rpc.ankr.com/bsc_testnet_chapel`,
       accounts: [OWNER_OLD_KEY],
