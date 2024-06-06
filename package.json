@@ -12,8 +12,9 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@chainlink/contracts": "^1.1.1",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "@openzeppelin/contracts": "^5.0.2",
+    "@openzeppelin/contracts": "5.0.2",
     "@tsconfig/node20": "^20.1.4",
     "dotenv": "^16.4.5",
     "ethers": "^6.12.1",
