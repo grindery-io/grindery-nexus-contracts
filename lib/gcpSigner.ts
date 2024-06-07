@@ -33,6 +33,7 @@ class GcpKmsSignerV6 extends AbstractSigner {
     this._signer = new GcpKmsSigner(kmsCredentials);
   }
   async getAddress(): Promise<string> {
+    console.log(new Error().stack);
     return await this._signer.getAddress();
   }
   connect(provider: Provider | null): ethers.Signer {
@@ -204,27 +205,29 @@ extendEnvironment((env) => {
           },
         })
     );
-    patchField(
-      ethers,
-      "getSigners",
-      (oldFunc) =>
-        new Proxy(oldFunc, {
-          apply: function (target, thisArg, args) {
-            const promise = Reflect.apply(target, thisArg, args);
-            return Promise.resolve(promise).then(async (signers: SignerWithAddressAlt[]) =>
-              signers
-                .filter((x) => !registeredSigners[env.ethers.getAddress(x.address)])
-                .concat(
-                  await Promise.all(
-                    Object.values(registeredSigners).map((x) =>
-                      SignerWithAddressAlt.create(signers[0].provider ? (x.connect(signers[0].provider) as any) : x)
+    if (env.network.name !== "hardhat") {
+      patchField(
+        ethers,
+        "getSigners",
+        (oldFunc) =>
+          new Proxy(oldFunc, {
+            apply: function (target, thisArg, args) {
+              const promise = Reflect.apply(target, thisArg, args);
+              return Promise.resolve(promise).then(async (signers: SignerWithAddressAlt[]) =>
+                signers
+                  .filter((x) => !registeredSigners[env.ethers.getAddress(x.address)])
+                  .concat(
+                    await Promise.all(
+                      Object.values(registeredSigners).map((x) =>
+                        SignerWithAddressAlt.create(signers[0].provider ? (x.connect(signers[0].provider) as any) : x)
+                      )
                     )
                   )
-                )
-            );
-          },
-        })
-    );
+              );
+            },
+          })
+      );
+    }
     return ethers;
   });
   let proto = ethers.JsonRpcProvider.prototype;

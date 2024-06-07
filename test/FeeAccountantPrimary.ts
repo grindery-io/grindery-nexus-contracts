@@ -1,6 +1,6 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
-import { ethers, deployments } from "hardhat";
+import { ethers, deployments, network } from "hardhat";
 import { GasTank__factory } from "../typechain-types/factories/contracts/GasTank__factory";
 import { FeeAccountantPrimary__factory } from "../typechain-types";
 
@@ -12,6 +12,8 @@ describe("FeeAccountantPrimary", function () {
     // Contracts are deployed using the first signer/account by default
     const [owner, walletUser, walletUser2, operator] = await ethers.getSigners();
 
+    await network.provider.send("hardhat_reset");
+
     const TestERC20 = await ethers.getContractFactory("TestERC20");
     const testErc20 = await TestERC20.deploy(ethers.parseEther("10000"));
 
@@ -20,14 +22,13 @@ describe("FeeAccountantPrimary", function () {
       .transfer(walletUser, ethers.parseEther("100"))
       .then((x) => x.wait());
 
-    const hre = await import("hardhat").then((x) => x.default);
-    hre.network.config.gasTokenAddress = (await testErc20.getAddress()) as any;
+    network.config.gasTokenAddress = (await testErc20.getAddress()) as any;
     await deployments.fixture();
 
-    const GasTank = await hre.deployments.get("GasTank");
+    const GasTank = await deployments.get("GasTank");
     const gasTank = GasTank__factory.connect(GasTank.address, owner);
 
-    const FeeAccountantPrimary = await hre.deployments.get("FeeAccountantPrimary");
+    const FeeAccountantPrimary = await deployments.get("FeeAccountantPrimary");
     const feeAccountantPrimary = FeeAccountantPrimary__factory.connect(FeeAccountantPrimary.address, owner);
 
     await feeAccountantPrimary
