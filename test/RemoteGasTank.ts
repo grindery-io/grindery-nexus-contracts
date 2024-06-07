@@ -87,6 +87,26 @@ describe("RemoteGasTank", function () {
       .withArgs(0n, await sampleSmartWallet.getAddress(), 0n, anyValue)
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
+    await expect(
+      sampleSmartWallet.delegateCall(
+        await gasTank.getAddress(),
+        gasTank.interface.encodeFunctionData("execute", [
+          await sampleContract.getAddress(),
+          sampleContract.interface.encodeFunctionData("sampleMethod"),
+          false,
+          await signer.signMessage(
+            ethers.getBytes(
+              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
+            )
+          ),
+        ]),
+        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      )
+    )
+      .to.emit(gasTank, "ReportGasFee")
+      .withArgs(0n, await sampleSmartWallet.getAddress(), 1n, anyValue)
+      .and.to.emit(sampleContract, "SampleEvent")
+      .withArgs(await sampleSmartWallet.getAddress());
   });
   it("Should record fee for failed tx", async function () {
     const { signer, gasTank, sampleSmartWallet, testErc20, feeAccountantPrimary, CHAIN_ID } =
