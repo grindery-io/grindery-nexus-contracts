@@ -17,12 +17,9 @@ contract RemoteGasTank is BaseGasTank {
         uint indexed nonce,
         uint256 fee
     );
-
-    constructor(
-        uint _feeNumerator,
-        uint _feeDenominator,
-        uint _baseGas
-    ) BaseGasTank(_feeNumerator, _feeDenominator, _baseGas) {}
+    
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor(address deploymentAddress) OnlyProxy(deploymentAddress) {}
 
     function _reportGasFee(
         bytes32 transaction,

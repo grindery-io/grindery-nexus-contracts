@@ -2,8 +2,6 @@
 
 pragma solidity 0.8.25;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
@@ -11,6 +9,10 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/utils/math/SignedMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import "./OnlyProxy.sol";
 
@@ -24,8 +26,8 @@ struct FeeRecord {
 
 contract FeeAccountantPrimary is
     ReentrancyGuard,
-    AccessControl,
-    Ownable
+    OwnableUpgradeable,
+    AccessControlUpgradeable
 {
     event TransferError(
         uint indexed chainId,
@@ -56,16 +58,26 @@ contract FeeAccountantPrimary is
 
     bytes32 public constant ROLE_OPERATOR = keccak256("ROLE_OPERATOR");
 
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    IERC20 private immutable gasToken;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    address private immutable gasTank;
+
     mapping(uint => AggregatorV3Interface) private priceFeeds;
 
     mapping(address => int256) private balances;
     mapping(bytes32 => uint256) private nonces;
-    IERC20 private gasToken;
-    address private gasTank;
 
-    constructor(address _gasToken, address _gasTank) Ownable(msg.sender) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor(address _gasToken, address _gasTank) {
         gasToken = IERC20(_gasToken);
         gasTank = _gasTank;
+    }
+
+    function initialize() public initializer {
+        __Context_init();
+        __Ownable_init(msg.sender);
+        __AccessControl_init();
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ROLE_OPERATOR, gasTank);
     }
@@ -140,7 +152,7 @@ contract FeeAccountantPrimary is
 
     function commitFees(
         FeeRecord[] calldata records
-    ) external onlyRole(ROLE_OPERATOR) {
+    ) external onlyRole(ROLE_OPERATOR) nonReentrant {
         for (uint i = 0; i < records.length; i++) {
             FeeRecord calldata record = records[i];
             bytes32 nonceKey = getNonceKey(record.wallet, record.chainId);

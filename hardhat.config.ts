@@ -7,9 +7,20 @@ registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
 
 import "hardhat-deploy";
 import { ethers } from "ethers";
-import { signerAddress, contractAddress } from "./lib/deterministicDeployment";
 
 import "./tasks/refund";
+
+declare module "hardhat/types/config" {
+  interface HardhatNetworkUserConfig {
+    gasTokenAddress?: `0x${string}`;
+  }
+  interface HardhatNetworkConfig {
+    gasTokenAddress?: `0x${string}`;
+  }
+  interface HttpNetworkConfig {
+    gasTokenAddress?: `0x${string}`;
+  }
+}
 
 function randomKey(salt: string) {
   return ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes("GrinderyTestAccount" + salt)));
@@ -25,13 +36,14 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       accounts: TEST_ACCOUNTS,
+      gasTokenAddress: "0x0000000000000000000000000000000000000000",
     },
     goerli: {
       url: `https://rpc.ankr.com/eth_goerli`,
       accounts: [],
     },
     sepolia: {
-      url: `https://rpc.ankr.com/eth_sepolia`,
+      url: `https://ethereum-sepolia.blockpi.network/v1/rpc/public`,
       accounts: [],
     },
     mumbai: {
@@ -44,7 +56,8 @@ const config: HardhatUserConfig = {
       },
     },
     amoy: {
-      url: `https://rpc.ankr.com/polygon_amoy`,
+      url: `https://rpc-amoy.polygon.technology`,
+      gasTokenAddress: "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
       accounts: [],
       verify: {
         etherscan: {
@@ -58,6 +71,7 @@ const config: HardhatUserConfig = {
     },
     polygon: {
       live: true,
+      gasTokenAddress: "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
       url: `https://rpc.ankr.com/polygon`,
       accounts: [],
       verify: {
@@ -145,14 +159,15 @@ const config: HardhatUserConfig = {
     owner: {
       default: OWNER_ADDRESS,
       31337: 0,
-    }
+    },
   },
   deterministicDeployment: () => {
     return {
-      factory: contractAddress,
-      deployer: signerAddress,
-      funding: "0",
-      signedTx: "0x0", // We will deploy from our own script
+      factory: "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      deployer: "0x3fab184622dc19b6109349b94811493bf2a45362",
+      funding: ethers.parseUnits(String(100 * 100000), "gwei").toString(),
+      signedTx:
+        "0xf8a58085174876e800830186a08080b853604580600e600039806000f350fe7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf31ba02222222222222222222222222222222222222222222222222222222222222222a02222222222222222222222222222222222222222222222222222222222222222",
     };
   },
 };

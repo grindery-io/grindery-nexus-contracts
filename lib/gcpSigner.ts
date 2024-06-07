@@ -20,10 +20,15 @@ import { LocalAccountsProvider } from "hardhat/internal/core/providers/accounts"
 import { validateParams } from "hardhat/internal/core/jsonrpc/types/input/validation";
 import { rpcTransactionRequest } from "hardhat/internal/core/jsonrpc/types/input/transactionRequest";
 import { bytesToHex } from "@nomicfoundation/ethereumjs-util";
+import { Provider as EdrProvider } from "@nomicfoundation/edr";
+import { HttpProvider } from "hardhat/internal/core/providers/http";
 
 class GcpKmsSignerV6 extends AbstractSigner {
   private readonly _signer: GcpKmsSigner;
-  constructor(private kmsCredentials: GcpKmsSignerCredentials, provider?: Provider) {
+  constructor(
+    private kmsCredentials: GcpKmsSignerCredentials,
+    provider?: Provider
+  ) {
     super(provider);
     this._signer = new GcpKmsSigner(kmsCredentials);
   }
@@ -142,7 +147,10 @@ class SignerWithAddressAlt extends AbstractSigner<Provider> {
     return new SignerWithAddressAlt(await signer.getAddress(), signer);
   }
 
-  private constructor(public readonly address: string, private readonly _signer: ethers.Signer) {
+  private constructor(
+    public readonly address: string,
+    private readonly _signer: ethers.Signer
+  ) {
     super(_signer.provider || undefined);
   }
 
@@ -239,6 +247,45 @@ extendEnvironment((env) => {
   Web3Provider.prototype.send = new Proxy(Web3Provider.prototype.send, {
     apply: sendApply,
   });
+  EdrProvider.prototype.handleRequest = new Proxy(EdrProvider.prototype.handleRequest, {
+    apply: async function (target, thisArg, argsArray) {
+      const req = JSON.parse(argsArray[0]);
+      if (req.method === "eth_sendTransaction") {
+        const params: any[] = req.params;
+        const [txRequest] = validateParams(params, rpcTransactionRequest);
+
+        const from = ethers.getAddress(bytesToHex(txRequest.from));
+        const signer = registeredSigners[from];
+        if (signer) {
+          if (txRequest.nonce === undefined) {
+            txRequest.nonce = await thisArg._getNonce(txRequest.from);
+          }
+          if (txRequest.accessList) {
+            throw new Error("Not implemented");
+          }
+          const rawTransaction = await signer.signTransaction({
+            type: txRequest.maxFeePerGas ? 2 : undefined,
+            from,
+            to: txRequest.to ? bytesToHex(txRequest.to) : undefined,
+            nonce: Number(txRequest.nonce),
+            gasLimit: txRequest.gas,
+            gasPrice: txRequest.gasPrice,
+            maxPriorityFeePerGas: txRequest.maxPriorityFeePerGas,
+            maxFeePerGas: txRequest.maxFeePerGas,
+            data: txRequest.data ? bytesToHex(txRequest.data) : undefined,
+            value: txRequest.value,
+            chainId: txRequest.chainId || env.network.config.chainId,
+          });
+          argsArray[0] = JSON.stringify({
+            method: "eth_sendRawTransaction",
+            params: [rawTransaction],
+          });
+        }
+      }
+      return Reflect.apply(target, thisArg, argsArray);
+    },
+  });
+
   LocalAccountsProvider.prototype.request = new Proxy(LocalAccountsProvider.prototype.request, {
     apply: async function (target, thisArg, argsArray) {
       const args: RequestArguments = argsArray[0];

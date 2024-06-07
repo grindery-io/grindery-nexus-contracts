@@ -1,13 +1,14 @@
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers, deployments } from "hardhat";
+import { GasTank__factory } from "../typechain-types/factories/contracts/GasTank__factory";
+import { FeeAccountantPrimary__factory } from "../typechain-types";
 
 describe("FeeAccountantPrimary", function () {
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshot in every test.
   async function deployFixture() {
-    await deployments.fixture();
     // Contracts are deployed using the first signer/account by default
     const [owner, walletUser, walletUser2, operator] = await ethers.getSigners();
 
@@ -19,30 +20,27 @@ describe("FeeAccountantPrimary", function () {
       .transfer(walletUser, ethers.parseEther("100"))
       .then((x) => x.wait());
 
-    const LocalGasTank = await ethers.getContractFactory("LocalGasTank");
-    const gasTank = await LocalGasTank.deploy(testErc20.getAddress(), 1, 1, 130000);
+    const hre = await import("hardhat").then((x) => x.default);
+    hre.network.config.gasTokenAddress = (await testErc20.getAddress()) as any;
+    await deployments.fixture();
 
-    const FeeAccountantPrimary = await ethers.getContractFactory("FeeAccountantPrimary");
-    const feeAccountantPrimary = await FeeAccountantPrimary.deploy(testErc20.getAddress(), gasTank.getAddress());
+    const GasTank = await hre.deployments.get("GasTank");
+    const gasTank = GasTank__factory.connect(GasTank.address, owner);
+
+    const FeeAccountantPrimary = await hre.deployments.get("FeeAccountantPrimary");
+    const feeAccountantPrimary = FeeAccountantPrimary__factory.connect(FeeAccountantPrimary.address, owner);
 
     await feeAccountantPrimary
-      .connect(owner)
       .grantRole(await feeAccountantPrimary.ROLE_OPERATOR(), operator.getAddress())
       .then((x) => x.wait());
 
     const MockV3Aggregator = await ethers.getContractFactory("MockV3Aggregator");
     const priceFeedLocal = await MockV3Aggregator.deploy(8, 1n * 10n ** 8n);
     const CHAIN_ID = await owner.provider.getNetwork().then((x) => x.chainId);
-    await feeAccountantPrimary
-      .connect(owner)
-      .setPriceFeed(CHAIN_ID, priceFeedLocal.getAddress())
-      .then((x) => x.wait());
+    await feeAccountantPrimary.setPriceFeed(CHAIN_ID, priceFeedLocal.getAddress()).then((x) => x.wait());
 
     const priceFeedDefaultForeign = await MockV3Aggregator.deploy(8, 1n * 10n ** 8n);
-    await feeAccountantPrimary
-      .connect(owner)
-      .setPriceFeed(1, priceFeedDefaultForeign.getAddress())
-      .then((x) => x.wait());
+    await feeAccountantPrimary.setPriceFeed(1, priceFeedDefaultForeign.getAddress()).then((x) => x.wait());
 
     const priceFeedDefaultForeign2x = await MockV3Aggregator.deploy(8, 2n * 10n ** 8n);
     await feeAccountantPrimary
@@ -57,9 +55,7 @@ describe("FeeAccountantPrimary", function () {
       operator,
       TestERC20,
       testErc20,
-      LocalGasTank,
       gasTank,
-      FeeAccountantPrimary,
       feeAccountantPrimary,
       priceFeedLocal,
       priceFeedDefaultForeign,

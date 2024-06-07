@@ -2,7 +2,6 @@
 
 pragma solidity 0.8.25;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -12,6 +11,10 @@ import "@openzeppelin/contracts/utils/math/SignedMath.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "./OnlyProxy.sol";
 import "./FeeAccountantPrimary.sol";
 
@@ -29,8 +32,8 @@ abstract contract BaseGasTank is
     IGasTank,
     ReentrancyGuard,
     OnlyProxy,
-    AccessControl,
-    Ownable
+    OwnableUpgradeable,
+    AccessControlUpgradeable
 {
     bytes32 public constant ROLE_SIGNER = keccak256("ROLE_SIGNER");
 
@@ -42,11 +45,14 @@ abstract contract BaseGasTank is
     uint feeDenominator;
     uint baseGas;
 
-    constructor(
+    function initialize(
         uint _feeNumerator,
         uint _feeDenominator,
         uint _baseGas
-    ) Ownable(msg.sender) {
+    ) public virtual initializer {
+        __Context_init();
+        __Ownable_init(msg.sender);
+        __AccessControl_init();
         feeNumerator = _feeNumerator;
         feeDenominator = _feeDenominator;
         baseGas = _baseGas;
@@ -57,7 +63,7 @@ abstract contract BaseGasTank is
         uint _feeNumerator,
         uint _feeDenominator,
         uint _baseGas
-    ) external onlyOwner {
+    ) external notProxy onlyOwner {
         feeNumerator = _feeNumerator;
         feeDenominator = _feeDenominator;
         baseGas = _baseGas;
@@ -118,12 +124,12 @@ abstract contract BaseGasTank is
         bytes calldata signature
     ) private onlyProxy {
         approvePayment(feeTokenAmount);
-        implementation().reportGasFee(transaction, feeTokenAmount, signature);
+        deployment().reportGasFee(transaction, feeTokenAmount, signature);
     }
 
     // Returns deployed implementation
-    function implementation() internal view returns (IGasTank) {
-        return IGasTank(__self);
+    function deployment() internal view returns (IGasTank) {
+        return IGasTank(__deploymentAddress);
     }
 
     // Called by delegatecall
@@ -137,7 +143,7 @@ abstract contract BaseGasTank is
         bytes memory result = delegateCall
             ? Address.functionDelegateCall(target, data)
             : Address.functionCall(target, data);
-        uint feeTokenAmount = implementation().calcGasFee(gasBefore);
+        uint feeTokenAmount = deployment().calcGasFee(gasBefore);
         reportGasFeeAndApprovePayment(bytes32(0), feeTokenAmount, signature);
         return result;
     }
@@ -149,9 +155,7 @@ abstract contract BaseGasTank is
         bytes calldata signature
     ) public onlyProxy {
         uint gasBefore = gasleft();
-        uint feeTokenAmount = implementation().calcGasFee(
-            gasBefore + gasUsed * 2
-        );
+        uint feeTokenAmount = deployment().calcGasFee(gasBefore + gasUsed * 2);
         reportGasFeeAndApprovePayment(transaction, feeTokenAmount, signature);
     }
 }
