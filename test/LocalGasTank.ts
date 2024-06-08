@@ -349,4 +349,46 @@ describe("LocalGasTank", function () {
     const { balance: newBalance } = await feeAccountantPrimary.getWalletRecord(sampleSmartWallet.getAddress(), 1);
     expect(newBalance).to.greaterThan(balance);
   });
+  it("Synthesized transaction ID should be verifiable without contract", async function () {
+    const { gasTank, sampleSmartWallet, sampleContract, testErc20, feeAccountantPrimary, CHAIN_ID, gasTankExecute } =
+      await loadFixture(deployFixture);
+    expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(0n);
+
+    const address = await sampleSmartWallet.getAddress();
+    await expect(
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
+      )
+    )
+      .to.emit(feeAccountantPrimary, "BalanceUpdated")
+      .withArgs(
+        CHAIN_ID,
+        (txid: string) => {
+          const txidBigInt = ethers.toBigInt(txid);
+          const hashPart = txidBigInt & 0x00000000_00000000_ffffffff_ffffffff_ffffffff_ffffffff_ffffffff_ffffffffn;
+          const verificationPart = ethers.keccak256(
+            ethers.getBytes(
+              ethers.solidityPacked(
+                ["bytes32", "address", "uint256"],
+                [ethers.getBytes(ethers.toBeHex(hashPart, 32)), address, CHAIN_ID]
+              )
+            )
+          );
+          const combined =
+            (ethers.toBigInt(verificationPart) &
+              0xffffffff_ffffffff_00000000_00000000_00000000_00000000_00000000_00000000n) |
+            hashPart;
+          return combined === txidBigInt;
+        },
+        await sampleSmartWallet.getAddress(),
+        anyValue,
+        0n,
+        anyValue,
+        0n
+      )
+      .and.to.emit(sampleContract, "SampleEvent")
+      .withArgs(await sampleSmartWallet.getAddress());
+  });
 });
