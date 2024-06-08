@@ -22,6 +22,7 @@
     "ethers": "^6.12.1",
     "ethers-gcp-kms-signer": "^1.1.6",
     "hardhat": "^2.22.4",
+    "hardhat-abi-exporter": "^2.10.1",
     "hardhat-deploy": "^0.12.4",
     "prettier": "^3.2.5",
     "ts-node": "^10.9.2",

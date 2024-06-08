@@ -1,5 +1,6 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "hardhat-abi-exporter";
 
 import { OWNER_KMS_KEY_PATH, OWNER_ADDRESS, POLYGONSCAN_API_KEY } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
@@ -37,7 +38,7 @@ const config: HardhatUserConfig = {
     hardhat: {
       accounts: TEST_ACCOUNTS,
       gasTokenAddress: "0x0000000000000000000000000000000000000000",
-      gasTankSigner:   "0x1111111111111111111111111111111111111111",
+      gasTankSigner: "0x1111111111111111111111111111111111111111",
     },
     goerli: {
       url: `https://rpc.ankr.com/eth_goerli`,
@@ -174,6 +175,13 @@ const config: HardhatUserConfig = {
       signedTx:
         "0xf8a58085174876e800830186a08080b853604580600e600039806000f350fe7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf31ba02222222222222222222222222222222222222222222222222222222222222222a02222222222222222222222222222222222222222222222222222222222222222",
     };
+  },
+  abiExporter: {
+    path: "./artifacts/abi",
+    runOnCompile: true,
+    clear: true,
+    flat: true,
+    format: "fullName",
   },
 };
 
