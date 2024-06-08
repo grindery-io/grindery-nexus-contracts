@@ -62,7 +62,7 @@ describe("RemoteGasTank", function () {
         await expect(ret)
           .to.emit(gasTank, "ReportGasFee")
           .withArgs(
-            await gasTank.getSynthesizedTransactionId(to, data, delegateCall),
+            await gasTank.getSynthesizedTransactionId(await sampleSmartWallet.getAddress(), to, data, delegateCall),
             await sampleSmartWallet.getAddress(),
             anyValue,
             anyValue

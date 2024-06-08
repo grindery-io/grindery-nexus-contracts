@@ -14,10 +14,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { owner } = await getNamedAccounts();
 
   const GasTank = await deployments.get("GasTank");
+  const proxy = await deployments.get(PROXY_NAME);
 
   await deploy(DEPLOYMENT_NAME, {
     contract: PROXY_NAME,
-    args: [hre.network.config.gasTokenAddress, GasTank.address],
+    args: [proxy.address, hre.network.config.gasTokenAddress, GasTank.address],
     from: owner,
     log: true,
     estimateGasExtra: 10000,
@@ -28,5 +29,5 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 func.id = DEPLOYMENT_NAME;
 func.tags = [DEPLOYMENT_NAME];
-func.dependencies = ["GasTank"];
+func.dependencies = ["GasTank", PROXY_NAME];
 export default func;

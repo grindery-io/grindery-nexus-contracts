@@ -26,6 +26,7 @@ struct FeeRecord {
 
 contract FeeAccountantPrimary is
     ReentrancyGuard,
+    OnlyProxy,
     OwnableUpgradeable,
     AccessControlUpgradeable
 {
@@ -69,7 +70,11 @@ contract FeeAccountantPrimary is
     mapping(bytes32 => uint256) private nonces;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _gasToken, address _gasTank) {
+    constructor(
+        address deploymentAddress,
+        address _gasToken,
+        address _gasTank
+    ) OnlyProxy(deploymentAddress) {
         gasToken = IERC20(_gasToken);
         gasTank = _gasTank;
     }
@@ -96,6 +101,10 @@ contract FeeAccountantPrimary is
         uint256 fee,
         uint chainId
     ) public view returns (uint256) {
+        if (chainId == block.chainid) {
+            // Gas optimization
+            return fee;
+        }
         AggregatorV3Interface foreign = priceFeeds[chainId];
         AggregatorV3Interface local = priceFeeds[block.chainid];
         if (address(foreign) == address(0)) {
@@ -136,7 +145,7 @@ contract FeeAccountantPrimary is
         return (balances[wallet], nonces[getNonceKey(wallet, chainId)]);
     }
 
-    function payFee(uint256 amount) public {
+    function payFee(uint256 amount) public nonReentrant notProxy {
         gasToken.transferFrom(msg.sender, gasTank, amount);
         balances[msg.sender] -= SafeCast.toInt256(amount);
         emit BalanceUpdated(
@@ -148,6 +157,20 @@ contract FeeAccountantPrimary is
             0,
             balances[msg.sender]
         );
+    }
+
+    // Called via delegatecall
+    function approveAndPayFee(
+        uint256 amount,
+        uint256 extraAllowance
+    ) public onlyProxy {
+        uint256 targetAllowance = amount + extraAllowance;
+        if (gasToken.allowance(msg.sender, gasTank) < targetAllowance) {
+            gasToken.approve(__deploymentAddress, targetAllowance);
+        }
+        if (amount > 0) {
+            FeeAccountantPrimary(__deploymentAddress).payFee(amount);
+        }
     }
 
     function commitFees(

@@ -49,6 +49,14 @@ describe("FeeAccountantPrimary", function () {
       .setPriceFeed(2, priceFeedDefaultForeign2x.getAddress())
       .then((x) => x.wait());
 
+    const SampleSmartWallet = await ethers.getContractFactory("SampleSmartWallet");
+    const sampleSmartWallet = await SampleSmartWallet.deploy();
+
+    await testErc20
+      .connect(owner)
+      .transfer(sampleSmartWallet.getAddress(), ethers.parseEther("100"))
+      .then((x) => x.wait());
+
     return {
       owner,
       walletUser,
@@ -61,6 +69,7 @@ describe("FeeAccountantPrimary", function () {
       priceFeedLocal,
       priceFeedDefaultForeign,
       priceFeedDefaultForeign2x,
+      sampleSmartWallet,
       CHAIN_ID,
     };
   }
@@ -662,6 +671,72 @@ describe("FeeAccountantPrimary", function () {
 
       expect(await testErc20.balanceOf(walletUser.getAddress())).to.equal(walletBalance - SAMPLE_FEE * 3n);
       expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(SAMPLE_FEE * 3n);
+    });
+    it("Should allow smart wallet to pay fee and pre-approve future fee", async function () {
+      const { operator, gasTank, feeAccountantPrimary, testErc20, sampleSmartWallet } =
+        await loadFixture(deployFixture);
+      let { nonce, balance } = await feeAccountantPrimary.getWalletRecord(sampleSmartWallet.getAddress(), 1);
+      expect(balance).to.equal(0n);
+      expect(nonce).to.equal(0n);
+
+      expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(0n);
+      const walletBalance = await testErc20.balanceOf(sampleSmartWallet.getAddress());
+      expect(walletBalance).to.greaterThan(SAMPLE_FEE * 100n);
+
+      await expect(
+        feeAccountantPrimary.connect(operator).commitFees([
+          {
+            chainId: 2n,
+            wallet: sampleSmartWallet.getAddress(),
+            transaction: SAMPLE_TX,
+            nonce: 0,
+            fee: SAMPLE_FEE,
+          },
+        ])
+      )
+        .to.emit(feeAccountantPrimary, "BalanceUpdated")
+        .withArgs(2n, SAMPLE_TX, sampleSmartWallet.getAddress(), SAMPLE_FEE, 0n, SAMPLE_FEE * 2n, SAMPLE_FEE * 2n);
+      ({ nonce, balance } = await feeAccountantPrimary.getWalletRecord(sampleSmartWallet.getAddress(), 2));
+      expect(balance).to.equal(SAMPLE_FEE * 2n);
+      expect(nonce).to.equal(1n);
+      await expect(
+        sampleSmartWallet.delegateCall(
+          await feeAccountantPrimary.getAddress(),
+          feeAccountantPrimary.interface.encodeFunctionData("approveAndPayFee", [SAMPLE_FEE * 2n, SAMPLE_FEE * 10n])
+        )
+      )
+        .to.emit(feeAccountantPrimary, "BalanceUpdated")
+        .withArgs(
+          ethers.MaxUint256,
+          ethers.hexlify(Buffer.alloc(32, 0)),
+          sampleSmartWallet.getAddress(),
+          0n,
+          0n,
+          0n,
+          0n
+        );
+      expect(await testErc20.balanceOf(sampleSmartWallet.getAddress())).to.equal(walletBalance - SAMPLE_FEE * 2n);
+      expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(SAMPLE_FEE * 2n);
+      ({ nonce, balance } = await feeAccountantPrimary.getWalletRecord(sampleSmartWallet.getAddress(), 2));
+      expect(balance).to.equal(0n);
+      expect(nonce).to.equal(1n);
+
+      await expect(
+        feeAccountantPrimary.connect(operator).commitFees([
+          {
+            chainId: 2n,
+            wallet: sampleSmartWallet.getAddress(),
+            transaction: SAMPLE_TX,
+            nonce: 1,
+            fee: SAMPLE_FEE,
+          },
+        ])
+      )
+        .to.emit(feeAccountantPrimary, "BalanceUpdated")
+        .withArgs(2n, SAMPLE_TX, sampleSmartWallet.getAddress(), SAMPLE_FEE, 1n, SAMPLE_FEE * 2n, 0n);
+      ({ nonce, balance } = await feeAccountantPrimary.getWalletRecord(sampleSmartWallet.getAddress(), 2));
+      expect(balance).to.equal(0n);
+      expect(nonce).to.equal(2n);
     });
     it("Should revert if user does not have enough balance", async function () {
       const { owner, walletUser, operator, gasTank, feeAccountantPrimary, testErc20, CHAIN_ID } =

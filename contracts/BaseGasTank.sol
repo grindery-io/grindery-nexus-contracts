@@ -117,15 +117,18 @@ abstract contract BaseGasTank is
     }
 
     function getSynthesizedTransactionId(
+        address wallet,
         address target,
         bytes calldata data,
         bool delegateCall
-    ) public pure returns (bytes32) {
+    ) public view returns (bytes32) {
         // This allows determining if transaction hash in event data is real
         bytes32 hash = keccak256(abi.encodePacked(target, data, delegateCall)) &
             0x00000000_00000000_ffffffff_ffffffff_ffffffff_ffffffff_ffffffff_ffffffff;
         return
-            (keccak256(abi.encodePacked(hash)) &
+            (keccak256(
+                abi.encodePacked(hash, wallet, getNonce(wallet), block.chainid)
+            ) &
                 0xffffffff_ffffffff_00000000_00000000_00000000_00000000_00000000_00000000) |
             hash;
     }
@@ -142,7 +145,12 @@ abstract contract BaseGasTank is
                     keccak256("GAS_TANK_SIGNING_HASH"),
                     wallet,
                     getNonce(wallet),
-                    getSynthesizedTransactionId(target, data, delegateCall)
+                    getSynthesizedTransactionId(
+                        wallet,
+                        target,
+                        data,
+                        delegateCall
+                    )
                 )
             );
     }
@@ -171,15 +179,17 @@ abstract contract BaseGasTank is
         bytes calldata signature
     ) public onlyProxy returns (bytes memory) {
         uint gasBefore = gasleft();
+        bytes32 transaction = getSynthesizedTransactionId(
+            address(this),
+            target,
+            data,
+            delegateCall
+        );
         bytes memory result = delegateCall
             ? Address.functionDelegateCall(target, data)
             : Address.functionCall(target, data);
         uint feeTokenAmount = deployment().calcGasFee(gasBefore);
-        reportGasFeeAndApprovePayment(
-            getSynthesizedTransactionId(target, data, delegateCall),
-            feeTokenAmount,
-            signature
-        );
+        reportGasFeeAndApprovePayment(transaction, feeTokenAmount, signature);
         return result;
     }
 

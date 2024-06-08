@@ -80,7 +80,7 @@ describe("LocalGasTank", function () {
           .to.emit(feeAccountantPrimary, "BalanceUpdated")
           .withArgs(
             CHAIN_ID,
-            await gasTank.getSynthesizedTransactionId(to, data, delegateCall),
+            await gasTank.getSynthesizedTransactionId(await sampleSmartWallet.getAddress(), to, data, delegateCall),
             await sampleSmartWallet.getAddress(),
             anyValue,
             anyValue,

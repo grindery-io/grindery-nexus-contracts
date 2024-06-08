@@ -17,7 +17,7 @@ contract RemoteGasTank is BaseGasTank {
         uint indexed nonce,
         uint256 fee
     );
-    
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address deploymentAddress) OnlyProxy(deploymentAddress) {}
 
@@ -35,6 +35,9 @@ contract RemoteGasTank is BaseGasTank {
     }
 
     function getNonce(address wallet) public view override returns (uint) {
+        if (address(this) != __deploymentAddress) {
+            return RemoteGasTank(__deploymentAddress).getNonce(wallet);
+        }
         return nonces[wallet];
     }
 
