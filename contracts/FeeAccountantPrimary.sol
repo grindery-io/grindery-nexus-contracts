@@ -97,6 +97,10 @@ contract FeeAccountantPrimary is
         priceFeeds[chainId] = instance;
     }
 
+    function getPriceFeed(uint chainId) external view returns (address) {
+        return address(priceFeeds[chainId]);
+    }
+
     function foreignFeeToLocalFee(
         uint256 fee,
         uint chainId

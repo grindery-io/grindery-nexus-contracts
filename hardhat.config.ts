@@ -10,16 +10,15 @@ import { ethers } from "ethers";
 
 import "./tasks/refund";
 
+interface NetworkConfigExtra {
+  gasTokenAddress?: `0x${string}`;
+  priceFeeds?: { [chainId: number]: `0x${string}` };
+}
+
 declare module "hardhat/types/config" {
-  interface HardhatNetworkUserConfig {
-    gasTokenAddress?: `0x${string}`;
-  }
-  interface HardhatNetworkConfig {
-    gasTokenAddress?: `0x${string}`;
-  }
-  interface HttpNetworkConfig {
-    gasTokenAddress?: `0x${string}`;
-  }
+  interface HardhatNetworkUserConfig extends NetworkConfigExtra {}
+  interface HardhatNetworkConfig extends NetworkConfigExtra {}
+  interface HttpNetworkConfig extends NetworkConfigExtra {}
 }
 
 function randomKey(salt: string) {
@@ -58,6 +57,10 @@ const config: HardhatUserConfig = {
     amoy: {
       url: `https://rpc-amoy.polygon.technology`,
       gasTokenAddress: "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
+      priceFeeds: {
+        80002: "0x001382149eBa3441043c1c66972b4772963f5D43",
+        11155111: "0xF0d50568e3A7e8259E16663972b11910F89BD8e7",
+      },
       accounts: [],
       verify: {
         etherscan: {
