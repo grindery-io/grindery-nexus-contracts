@@ -12,6 +12,7 @@ import "./tasks/refund";
 
 interface NetworkConfigExtra {
   gasTokenAddress?: `0x${string}`;
+  gasTankSigner?: `0x${string}`;
   priceFeeds?: { [chainId: number]: `0x${string}` };
 }
 
@@ -36,6 +37,7 @@ const config: HardhatUserConfig = {
     hardhat: {
       accounts: TEST_ACCOUNTS,
       gasTokenAddress: "0x0000000000000000000000000000000000000000",
+      gasTankSigner:   "0x1111111111111111111111111111111111111111",
     },
     goerli: {
       url: `https://rpc.ankr.com/eth_goerli`,

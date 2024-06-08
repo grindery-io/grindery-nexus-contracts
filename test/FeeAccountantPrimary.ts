@@ -1,8 +1,7 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers, deployments, network } from "hardhat";
-import { GasTank__factory } from "../typechain-types/factories/contracts/GasTank__factory";
-import { FeeAccountantPrimary__factory } from "../typechain-types";
+import { BaseGasTank__factory, FeeAccountantPrimary__factory } from "../typechain-types";
 
 describe("FeeAccountantPrimary", function () {
   // We define a fixture to reuse the same setup in every test.
@@ -26,7 +25,7 @@ describe("FeeAccountantPrimary", function () {
     await deployments.fixture();
 
     const GasTank = await deployments.get("GasTank");
-    const gasTank = GasTank__factory.connect(GasTank.address, owner);
+    const gasTank = BaseGasTank__factory.connect(GasTank.address, owner);
 
     const FeeAccountantPrimary = await deployments.get("FeeAccountantPrimary");
     const feeAccountantPrimary = FeeAccountantPrimary__factory.connect(FeeAccountantPrimary.address, owner);
