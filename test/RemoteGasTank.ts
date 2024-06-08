@@ -3,6 +3,7 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { ethers, deployments, network } from "hardhat";
 import { RemoteGasTank__factory } from "../typechain-types";
+import { AddressLike, BytesLike } from "ethers";
 
 describe("RemoteGasTank", function () {
   // We define a fixture to reuse the same setup in every test.
@@ -44,57 +45,62 @@ describe("RemoteGasTank", function () {
       SampleSmartWallet,
       sampleSmartWallet,
       sampleContract,
+      gasTankExecute: async (to: AddressLike, data: BytesLike, delegateCall: boolean) => {
+        const ret = sampleSmartWallet.delegateCall(
+          await gasTank.getAddress(),
+          gasTank.interface.encodeFunctionData("execute", [
+            to,
+            data,
+            delegateCall,
+            await signer.signMessage(
+              ethers.getBytes(
+                await gasTank.getSigningHashFromCallData(sampleSmartWallet.getAddress(), to, data, delegateCall)
+              )
+            ),
+          ])
+        );
+        await expect(ret)
+          .to.emit(gasTank, "ReportGasFee")
+          .withArgs(
+            await gasTank.getSynthesizedTransactionId(to, data, delegateCall),
+            await sampleSmartWallet.getAddress(),
+            anyValue,
+            anyValue
+          );
+        return ret;
+      },
     };
   }
 
   it("Should execute tx and record fee", async function () {
-    const { owner, signer, gasTank, sampleSmartWallet, sampleContract, testErc20 } =
+    const { owner, signer, gasTank, sampleSmartWallet, sampleContract, gasTankExecute } =
       await loadFixture(deployFixture);
 
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(gasTank, "ReportGasFee")
-      .withArgs(0n, await sampleSmartWallet.getAddress(), 0n, anyValue)
+      .withArgs(anyValue, await sampleSmartWallet.getAddress(), 0n, anyValue)
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(gasTank, "ReportGasFee")
-      .withArgs(0n, await sampleSmartWallet.getAddress(), 1n, anyValue)
+      .withArgs(anyValue, await sampleSmartWallet.getAddress(), 1n, anyValue)
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
   });
   it("Should record fee for failed tx", async function () {
-    const { signer, gasTank, sampleSmartWallet, testErc20 } =
-      await loadFixture(deployFixture);
+    const { signer, gasTank, sampleSmartWallet, testErc20 } = await loadFixture(deployFixture);
     expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(0n);
 
     await expect(

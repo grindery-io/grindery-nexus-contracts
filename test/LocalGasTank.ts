@@ -1,8 +1,9 @@
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
+import { loadFixture, mine } from "@nomicfoundation/hardhat-network-helpers";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { ethers, deployments, network } from "hardhat";
 import { FeeAccountantPrimary__factory, LocalGasTank__factory } from "../typechain-types";
+import { AddressLike, BytesLike } from "ethers";
 
 describe("LocalGasTank", function () {
   // We define a fixture to reuse the same setup in every test.
@@ -56,32 +57,64 @@ describe("LocalGasTank", function () {
       SampleSmartWallet,
       sampleSmartWallet,
       sampleContract,
+      gasTankExecute: async (to: AddressLike, data: BytesLike, delegateCall: boolean) => {
+        await network.provider.send("hardhat_setNextBlockBaseFeePerGas", [
+          ethers.toBeHex(ethers.parseUnits("1", "gwei")),
+        ]);
+        await mine();
+        const ret = sampleSmartWallet.delegateCall(
+          await gasTank.getAddress(),
+          gasTank.interface.encodeFunctionData("execute", [
+            to,
+            data,
+            delegateCall,
+            await signer.signMessage(
+              ethers.getBytes(
+                await gasTank.getSigningHashFromCallData(sampleSmartWallet.getAddress(), to, data, delegateCall)
+              )
+            ),
+          ]),
+          { maxFeePerGas: ethers.parseUnits("1", "gwei"), maxPriorityFeePerGas: ethers.parseUnits("1", "gwei") }
+        );
+        await expect(ret)
+          .to.emit(feeAccountantPrimary, "BalanceUpdated")
+          .withArgs(
+            CHAIN_ID,
+            await gasTank.getSynthesizedTransactionId(to, data, delegateCall),
+            await sampleSmartWallet.getAddress(),
+            anyValue,
+            anyValue,
+            anyValue,
+            anyValue
+          );
+        return ret;
+      },
     };
   }
 
   it("Should execute tx and record fee", async function () {
-    const { owner, signer, gasTank, sampleSmartWallet, sampleContract, testErc20, feeAccountantPrimary, CHAIN_ID } =
-      await loadFixture(deployFixture);
+    const {
+      owner,
+      signer,
+      gasTank,
+      sampleSmartWallet,
+      sampleContract,
+      testErc20,
+      feeAccountantPrimary,
+      CHAIN_ID,
+      gasTankExecute,
+    } = await loadFixture(deployFixture);
     expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(0n);
 
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
-      .withArgs(CHAIN_ID, 0n, await sampleSmartWallet.getAddress(), anyValue, 0n, anyValue, 0n)
+      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), anyValue, 0n, anyValue, 0n)
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
@@ -89,23 +122,14 @@ describe("LocalGasTank", function () {
     expect(tankReceived).to.be.greaterThan(0n);
 
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
-      .withArgs(CHAIN_ID, 0n, await sampleSmartWallet.getAddress(), tankReceived, 1n, tankReceived, 0n)
+      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), tankReceived, 1n, tankReceived, 0n)
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
@@ -118,49 +142,48 @@ describe("LocalGasTank", function () {
     );
 
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
-      .withArgs(CHAIN_ID, 0n, await sampleSmartWallet.getAddress(), tankReceived, 2n, tankReceived, tankReceived - 100n)
+      .withArgs(
+        CHAIN_ID,
+        anyValue,
+        await sampleSmartWallet.getAddress(),
+        tankReceived,
+        2n,
+        tankReceived,
+        tankReceived - 100n
+      )
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
   });
   it("Should allow fee scaling", async function () {
-    const { owner, signer, gasTank, sampleSmartWallet, sampleContract, testErc20, feeAccountantPrimary, CHAIN_ID } =
-      await loadFixture(deployFixture);
+    const {
+      owner,
+      signer,
+      gasTank,
+      sampleSmartWallet,
+      sampleContract,
+      testErc20,
+      feeAccountantPrimary,
+      CHAIN_ID,
+      gasTankExecute,
+    } = await loadFixture(deployFixture);
     expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(0n);
 
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
-      .withArgs(CHAIN_ID, 0n, await sampleSmartWallet.getAddress(), anyValue, 0n, anyValue, 0n)
+      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), anyValue, 0n, anyValue, 0n)
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
@@ -172,23 +195,14 @@ describe("LocalGasTank", function () {
       .setFeeRate(2n, 1n, 130000)
       .then((x) => x.wait());
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
-      .withArgs(CHAIN_ID, 0n, await sampleSmartWallet.getAddress(), tankReceived * 2n, 1n, tankReceived * 2n, 0n)
+      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), tankReceived * 2n, 1n, tankReceived * 2n, 0n)
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
@@ -197,25 +211,16 @@ describe("LocalGasTank", function () {
       .setFeeRate(3n, 2n, 130000)
       .then((x) => x.wait());
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
       .withArgs(
         CHAIN_ID,
-        0n,
+        anyValue,
         await sampleSmartWallet.getAddress(),
         (tankReceived * 3n) / 2n,
         2n,
@@ -259,8 +264,16 @@ describe("LocalGasTank", function () {
     expect(tankReceived).to.be.greaterThan(0n);
   });
   it("Should not change allowence with prepaid fee", async function () {
-    const { signer, gasTank, sampleSmartWallet, sampleContract, testErc20, feeAccountantPrimary, CHAIN_ID } =
-      await loadFixture(deployFixture);
+    const {
+      signer,
+      gasTank,
+      sampleSmartWallet,
+      sampleContract,
+      testErc20,
+      feeAccountantPrimary,
+      CHAIN_ID,
+      gasTankExecute,
+    } = await loadFixture(deployFixture);
     await sampleSmartWallet.call(
       await testErc20.getAddress(),
       testErc20.interface.encodeFunctionData("approve", [
@@ -278,23 +291,14 @@ describe("LocalGasTank", function () {
     const { balance } = await feeAccountantPrimary.getWalletRecord(sampleSmartWallet.getAddress(), 1);
 
     await expect(
-      sampleSmartWallet.delegateCall(
-        await gasTank.getAddress(),
-        gasTank.interface.encodeFunctionData("execute", [
-          await sampleContract.getAddress(),
-          sampleContract.interface.encodeFunctionData("sampleMethod"),
-          false,
-          await signer.signMessage(
-            ethers.getBytes(
-              await gasTank.getSigningHash(await sampleSmartWallet.getAddress(), ethers.hexlify(Buffer.alloc(32, 0)))
-            )
-          ),
-        ]),
-        { gasLimit: 30000000, gasPrice: ethers.parseUnits("1", "gwei") }
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
-      .withArgs(CHAIN_ID, 0n, await sampleSmartWallet.getAddress(), anyValue, 0n, anyValue, anyValue)
+      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), anyValue, 0n, anyValue, anyValue)
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
