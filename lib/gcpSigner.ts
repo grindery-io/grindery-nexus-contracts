@@ -33,7 +33,6 @@ class GcpKmsSignerV6 extends AbstractSigner {
     this._signer = new GcpKmsSigner(kmsCredentials);
   }
   async getAddress(): Promise<string> {
-    console.log(new Error().stack);
     return await this._signer.getAddress();
   }
   connect(provider: Provider | null): ethers.Signer {
