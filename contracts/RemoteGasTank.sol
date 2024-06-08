@@ -34,10 +34,9 @@ contract RemoteGasTank is BaseGasTank {
         nonces[msg.sender]++;
     }
 
-    function getNonce(address wallet) public view override returns (uint) {
-        if (address(this) != __deploymentAddress) {
-            return RemoteGasTank(__deploymentAddress).getNonce(wallet);
-        }
+    function getNonce(
+        address wallet
+    ) public view override notProxy returns (uint) {
         return nonces[wallet];
     }
 

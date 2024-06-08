@@ -120,15 +120,16 @@ abstract contract BaseGasTank is
         address wallet,
         address target,
         bytes calldata data,
+        uint256 value,
         bool delegateCall
     ) public view returns (bytes32) {
         // This allows determining if transaction hash in event data is real
-        bytes32 hash = keccak256(abi.encodePacked(target, data, delegateCall)) &
+        bytes32 hash = keccak256(
+            abi.encodePacked(target, data, value, delegateCall)
+        ) &
             0x00000000_00000000_ffffffff_ffffffff_ffffffff_ffffffff_ffffffff_ffffffff;
         return
-            (keccak256(
-                abi.encodePacked(hash, wallet, getNonce(wallet), block.chainid)
-            ) &
+            (keccak256(abi.encodePacked(hash, wallet, block.chainid)) &
                 0xffffffff_ffffffff_00000000_00000000_00000000_00000000_00000000_00000000) |
             hash;
     }
@@ -137,8 +138,9 @@ abstract contract BaseGasTank is
         address wallet,
         address target,
         bytes calldata data,
+        uint256 value,
         bool delegateCall
-    ) public view returns (bytes32) {
+    ) public view notProxy returns (bytes32) {
         return
             keccak256(
                 abi.encodePacked(
@@ -149,6 +151,7 @@ abstract contract BaseGasTank is
                         wallet,
                         target,
                         data,
+                        value,
                         delegateCall
                     )
                 )
@@ -175,6 +178,7 @@ abstract contract BaseGasTank is
     function execute(
         address target,
         bytes calldata data,
+        uint256 value,
         bool delegateCall,
         bytes calldata signature
     ) public onlyProxy returns (bytes memory) {
@@ -183,11 +187,16 @@ abstract contract BaseGasTank is
             address(this),
             target,
             data,
+            value,
             delegateCall
         );
         bytes memory result = delegateCall
             ? Address.functionDelegateCall(target, data)
-            : Address.functionCall(target, data);
+            : (
+                value > 0
+                    ? Address.functionCallWithValue(target, data, value)
+                    : Address.functionCall(target, data)
+            );
         uint feeTokenAmount = deployment().calcGasFee(gasBefore);
         reportGasFeeAndApprovePayment(transaction, feeTokenAmount, signature);
         return result;

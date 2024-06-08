@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 contract SampleSmartWallet {
     event SampleEvent(address sender);
 
-    function sampleMethod() external {
+    function sampleMethod() external payable {
         emit SampleEvent(msg.sender);
     }
 

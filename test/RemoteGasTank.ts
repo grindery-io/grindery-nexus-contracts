@@ -45,16 +45,17 @@ describe("RemoteGasTank", function () {
       SampleSmartWallet,
       sampleSmartWallet,
       sampleContract,
-      gasTankExecute: async (to: AddressLike, data: BytesLike, delegateCall: boolean) => {
+      gasTankExecute: async (to: AddressLike, data: BytesLike, delegateCall: boolean, value = 0n) => {
         const ret = sampleSmartWallet.delegateCall(
           await gasTank.getAddress(),
           gasTank.interface.encodeFunctionData("execute", [
             to,
             data,
+            value,
             delegateCall,
             await signer.signMessage(
               ethers.getBytes(
-                await gasTank.getSigningHashFromCallData(sampleSmartWallet.getAddress(), to, data, delegateCall)
+                await gasTank.getSigningHashFromCallData(sampleSmartWallet.getAddress(), to, data, value, delegateCall)
               )
             ),
           ])
@@ -62,7 +63,7 @@ describe("RemoteGasTank", function () {
         await expect(ret)
           .to.emit(gasTank, "ReportGasFee")
           .withArgs(
-            await gasTank.getSynthesizedTransactionId(await sampleSmartWallet.getAddress(), to, data, delegateCall),
+            await gasTank.getSynthesizedTransactionId(await sampleSmartWallet.getAddress(), to, data, value, delegateCall),
             await sampleSmartWallet.getAddress(),
             anyValue,
             anyValue
