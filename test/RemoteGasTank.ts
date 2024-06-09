@@ -10,19 +10,19 @@ describe("RemoteGasTank", function () {
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshot in every test.
   async function deployFixture() {
+    const [owner, walletUser, walletUser2, operator, signer] = await ethers.getSigners();
+
     network.config.gasTokenAddress = undefined;
+    network.config.gasTankSigner = await signer.getAddress();
     await network.provider.send("hardhat_reset");
     await deployments.fixture(undefined, { keepExistingDeployments: false });
     // Contracts are deployed using the first signer/account by default
-    const [owner, walletUser, walletUser2, operator, signer] = await ethers.getSigners();
 
     const TestERC20 = await ethers.getContractFactory("TestERC20");
     const testErc20 = await TestERC20.deploy(ethers.parseEther("10000"));
 
     const RemoteGasTank = await deployments.get("GasTank");
     const gasTank = RemoteGasTank__factory.connect(RemoteGasTank.address, owner);
-
-    await gasTank.grantRole(await gasTank.ROLE_SIGNER(), signer.getAddress()).then((x) => x.wait());
 
     const SampleSmartWallet = await ethers.getContractFactory("SampleSmartWallet");
     const sampleSmartWallet = await SampleSmartWallet.deploy();

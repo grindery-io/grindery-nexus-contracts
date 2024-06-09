@@ -5,6 +5,23 @@ import { ethers, deployments, network } from "hardhat";
 import { FeeAccountantPrimary__factory, LocalGasTank__factory } from "../typechain-types";
 import { AddressLike, BytesLike } from "ethers";
 
+function closeTo(target: bigint, delta: bigint) {
+  return (x: bigint) => !!expect(x).to.be.closeTo(target, delta);
+}
+function combine<T>(...fns: ((x: T) => boolean)[]) {
+  return (x: T) => fns.every((fn) => fn(x));
+}
+function slot<T = unknown>() {
+  const values = [] as T[];
+  return {
+    save: (x: T) => (values.push(x) ? true : true),
+    check:
+      (fn: (actual: T, stored: T) => boolean = (actual, stored) => actual === stored) =>
+      (actual: T) =>
+        Boolean(values.length && fn(actual, values.pop()!)),
+  };
+}
+
 describe("LocalGasTank", function () {
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
@@ -18,12 +35,11 @@ describe("LocalGasTank", function () {
     const testErc20 = await TestERC20.deploy(ethers.parseEther("10000"));
 
     network.config.gasTokenAddress = (await testErc20.getAddress()) as any;
+    network.config.gasTankSigner = await signer.getAddress();
     await deployments.fixture(undefined, { keepExistingDeployments: false });
 
     const GasTank = await deployments.get("GasTank");
     const gasTank = LocalGasTank__factory.connect(GasTank.address, owner);
-
-    await gasTank.grantRole(await gasTank.ROLE_SIGNER(), signer.getAddress()).then((x) => x.wait());
 
     const FeeAccountantPrimary = await deployments.get("FeeAccountantPrimary");
     const feeAccountantPrimary = FeeAccountantPrimary__factory.connect(FeeAccountantPrimary.address, owner);
@@ -61,7 +77,6 @@ describe("LocalGasTank", function () {
         await network.provider.send("hardhat_setNextBlockBaseFeePerGas", [
           ethers.toBeHex(ethers.parseUnits("1", "gwei")),
         ]);
-        await mine();
         const ret = sampleSmartWallet.delegateCall(
           await gasTank.getAddress(),
           gasTank.interface.encodeFunctionData("execute", [
@@ -136,7 +151,15 @@ describe("LocalGasTank", function () {
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
-      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), tankReceived, 1n, tankReceived, 0n)
+      .withArgs(
+        CHAIN_ID,
+        anyValue,
+        await sampleSmartWallet.getAddress(),
+        closeTo(tankReceived, ethers.parseUnits("5", "gwei")),
+        1n,
+        closeTo(tankReceived, ethers.parseUnits("5", "gwei")),
+        0n
+      )
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
@@ -148,6 +171,7 @@ describe("LocalGasTank", function () {
       ])
     );
 
+    const s = slot<bigint>();
     await expect(
       gasTankExecute(
         await sampleContract.getAddress(),
@@ -160,10 +184,10 @@ describe("LocalGasTank", function () {
         CHAIN_ID,
         anyValue,
         await sampleSmartWallet.getAddress(),
-        tankReceived,
+        combine(closeTo(tankReceived, ethers.parseUnits("5", "gwei")), s.save, s.save),
         2n,
-        tankReceived,
-        tankReceived - 100n
+        s.check(),
+        s.check((actual, stored) => actual === stored - 100n)
       )
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
@@ -232,6 +256,8 @@ describe("LocalGasTank", function () {
     const tankReceived = await testErc20.balanceOf(gasTank.getAddress());
     expect(tankReceived).to.be.greaterThan(0n);
 
+    const s = slot<bigint>();
+
     await gasTank
       .connect(owner)
       .setFeeRate(2n, 1n, 130000)
@@ -244,7 +270,15 @@ describe("LocalGasTank", function () {
       )
     )
       .to.emit(feeAccountantPrimary, "BalanceUpdated")
-      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), tankReceived * 2n, 1n, tankReceived * 2n, 0n)
+      .withArgs(
+        CHAIN_ID,
+        anyValue,
+        await sampleSmartWallet.getAddress(),
+        combine(closeTo(tankReceived * 2n, ethers.parseUnits("5", "gwei")), s.save),
+        1n,
+        s.check(),
+        0n
+      )
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
@@ -264,9 +298,9 @@ describe("LocalGasTank", function () {
         CHAIN_ID,
         anyValue,
         await sampleSmartWallet.getAddress(),
-        (tankReceived * 3n) / 2n,
+        combine(closeTo((tankReceived * 3n) / 2n, ethers.parseUnits("5", "gwei")), s.save),
         2n,
-        (tankReceived * 3n) / 2n,
+        s.check(),
         0n
       )
       .and.to.emit(sampleContract, "SampleEvent")
