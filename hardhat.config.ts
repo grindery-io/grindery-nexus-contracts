@@ -2,7 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "hardhat-abi-exporter";
 
-import { OWNER_KMS_KEY_PATH, OWNER_ADDRESS, POLYGONSCAN_API_KEY } from "./secrets";
+import { OWNER_KMS_KEY_PATH, OWNER_ADDRESS, POLYGONSCAN_API_KEY, GAS_TANK_SIGNER_TESTNET } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
 registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
 
@@ -13,7 +13,7 @@ import "./tasks/refund";
 
 interface NetworkConfigExtra {
   gasTokenAddress?: `0x${string}`;
-  gasTankSigner?: `0x${string}`;
+  gasTankSigner?: string;
   priceFeeds?: { [chainId: number]: `0x${string}` };
 }
 
@@ -46,6 +46,7 @@ const config: HardhatUserConfig = {
     },
     sepolia: {
       url: `https://ethereum-sepolia.blockpi.network/v1/rpc/public`,
+      gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       accounts: [],
     },
     mumbai: {
@@ -60,6 +61,7 @@ const config: HardhatUserConfig = {
     amoy: {
       url: `https://rpc-amoy.polygon.technology`,
       gasTokenAddress: "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
+      gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       priceFeeds: {
         80002: "0x001382149eBa3441043c1c66972b4772963f5D43",
         11155111: "0xF0d50568e3A7e8259E16663972b11910F89BD8e7",
