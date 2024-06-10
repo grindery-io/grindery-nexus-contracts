@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/utils/math/SignedMath.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "./BaseGasTank.sol";
+import "./FeeAccountantPrimary.sol";
 
 contract LocalGasTank is BaseGasTank {
     bytes32 public constant ROLE_WITHDRAW = keccak256("ROLE_WITHDRAW");
@@ -24,6 +25,14 @@ contract LocalGasTank is BaseGasTank {
     ) OnlyProxy(_deploymentAddress) {
         gasToken = IERC20(_gasToken);
         feeAccountant = FeeAccountantPrimary(_feeAccountant);
+    }
+
+    function getGasToken() public view returns (address) {
+        return address(gasToken);
+    }
+
+    function getFeeAccountant() public view returns (address) {
+        return address(feeAccountant);
     }
 
     function _reportGasFee(
@@ -57,7 +66,7 @@ contract LocalGasTank is BaseGasTank {
             block.chainid
         );
         uint balance = gasToken.balanceOf(wallet);
-        uint targetAllowance = Math.min(
+        uint payAmount = Math.min(
             balance,
             SafeCast.toUint256(
                 SignedMath.max(
@@ -66,11 +75,15 @@ contract LocalGasTank is BaseGasTank {
                 )
             )
         );
-        if (
-            targetAllowance > 0 &&
-            gasToken.allowance(wallet, address(feeAccountant)) < targetAllowance
-        ) {
-            gasToken.approve(address(feeAccountant), targetAllowance);
+        if (payAmount > 0) {
+            Address.functionDelegateCall(
+                address(feeAccountant),
+                abi.encodeWithSelector(
+                    FeeAccountantPrimary.approveAndPayFee.selector,
+                    payAmount,
+                    0
+                )
+            );
         }
     }
 

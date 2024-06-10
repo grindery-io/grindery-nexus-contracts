@@ -56,6 +56,7 @@ contract FeeAccountantPrimary is
         uint nonce,
         uint expectedNonce
     );
+    error OutOfGas();
 
     bytes32 public constant ROLE_OPERATOR = keccak256("ROLE_OPERATOR");
 
@@ -210,6 +211,7 @@ contract FeeAccountantPrimary is
                     )
                 );
                 if (feeToTransfer > 0) {
+                    uint256 gasBefore = gasleft();
                     try
                         gasToken.transferFrom(
                             record.wallet,
@@ -219,6 +221,9 @@ contract FeeAccountantPrimary is
                     {
                         balance = balance - feeToTransfer;
                     } catch (bytes memory error) {
+                        if (gasleft() < gasBefore / 8) {
+                            revert OutOfGas();
+                        }
                         emit TransferError(
                             record.chainId,
                             record.transaction,

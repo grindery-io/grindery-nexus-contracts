@@ -15,6 +15,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import "@openzeppelin/contracts/utils/StorageSlot.sol";
 import "./OnlyProxy.sol";
 import "./FeeAccountantPrimary.sol";
 
@@ -40,6 +41,7 @@ abstract contract BaseGasTank is
     event FeeRateUpdated(uint feeNumerator, uint feeDenominator, uint baseGas);
 
     error InvalidSignature();
+    error OutOfGas();
 
     uint feeNumerator;
     uint feeDenominator;
@@ -166,7 +168,11 @@ abstract contract BaseGasTank is
         bytes calldata signature
     ) private onlyProxy {
         approvePayment(feeTokenAmount);
+        uint256 gasBefore = gasleft();
         deployment().reportGasFee(transaction, feeTokenAmount, signature);
+        if (gasleft() < gasBefore / 8) {
+            revert OutOfGas();
+        }
     }
 
     // Returns deployed implementation
