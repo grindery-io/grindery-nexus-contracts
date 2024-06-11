@@ -241,6 +241,8 @@ describe("LocalGasTank", function () {
     } = await loadFixture(deployFixture);
     expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(0n);
 
+    const { _baseGas } = await gasTank.getFeeRate();
+
     await expect(
       gasTankExecute(
         await sampleContract.getAddress(),
@@ -260,7 +262,7 @@ describe("LocalGasTank", function () {
 
     await gasTank
       .connect(owner)
-      .setFeeRate(2n, 1n, 130000)
+      .setFeeRate(2n, 1n, _baseGas)
       .then((x) => x.wait());
     await expect(
       gasTankExecute(
@@ -284,7 +286,7 @@ describe("LocalGasTank", function () {
 
     await gasTank
       .connect(owner)
-      .setFeeRate(3n, 2n, 130000)
+      .setFeeRate(3n, 2n, _baseGas)
       .then((x) => x.wait());
     await expect(
       gasTankExecute(
@@ -401,18 +403,18 @@ describe("LocalGasTank", function () {
         CHAIN_ID,
         (txid: string) => {
           const txidBigInt = ethers.toBigInt(txid);
-          const hashPart = txidBigInt & 0x00000000_00000000_ffffffff_ffffffff_ffffffff_ffffffff_ffffffff_ffffffffn;
+          const hashPart = txidBigInt & 0x00000000_00000000_00000000_00000000_ffffffff_ffffffff_ffffffff_ffffffffn;
           const verificationPart = ethers.keccak256(
             ethers.getBytes(
               ethers.solidityPacked(
-                ["bytes32", "address", "uint256"],
-                [ethers.getBytes(ethers.toBeHex(hashPart, 32)), address, CHAIN_ID]
+                ["bytes32", "address", "uint256", "uint256"],
+                [ethers.getBytes(ethers.toBeHex(hashPart, 32)), address, 0n, CHAIN_ID]
               )
             )
           );
           const combined =
             (ethers.toBigInt(verificationPart) &
-              0xffffffff_ffffffff_00000000_00000000_00000000_00000000_00000000_00000000n) |
+              0xffffffff_ffffffff_ffffffff_ffffffff_00000000_00000000_00000000_00000000n) |
             hashPart;
           return combined === txidBigInt;
         },

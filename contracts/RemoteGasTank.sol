@@ -23,12 +23,13 @@ contract RemoteGasTank is BaseGasTank {
 
     function _reportGasFee(
         bytes32 transaction,
-        uint feeTokenAmount
+        uint feeTokenAmount,
+        uint nonce
     ) internal override notProxy {
         emit ReportGasFee(
             transaction,
             msg.sender,
-            nonces[msg.sender],
+            nonce,
             feeTokenAmount
         );
         nonces[msg.sender]++;

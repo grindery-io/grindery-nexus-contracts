@@ -72,6 +72,15 @@ abstract contract BaseGasTank is
         emit FeeRateUpdated(_feeNumerator, _feeDenominator, _baseGas);
     }
 
+    function getFeeRate()
+        external
+        view
+        notProxy
+        returns (uint _feeNumerator, uint _feeDenominator, uint _baseGas)
+    {
+        return (feeNumerator, feeDenominator, baseGas);
+    }
+
     function calcGasFee(uint gasBefore) external view notProxy returns (uint) {
         uint gasused = gasBefore - gasleft() + baseGas;
         uint txfee = tx.gasprice * gasused;
@@ -81,7 +90,8 @@ abstract contract BaseGasTank is
 
     function _reportGasFee(
         bytes32 transaction,
-        uint feeTokenAmount
+        uint feeTokenAmount,
+        uint nonce
     ) internal virtual;
 
     function reportGasFee(
@@ -89,6 +99,14 @@ abstract contract BaseGasTank is
         uint feeTokenAmount,
         bytes calldata signature
     ) external notProxy {
+        uint nonce = getNonce(msg.sender);
+        if (transaction & 0xffffffff_ffffffff_ffffffff_ffffffff_00000000_00000000_00000000_00000000 == 0) {
+            transaction = getSynthesizedTransactionId2(
+                msg.sender,
+                transaction,
+                nonce
+            );
+        }
         address signer = ECDSA.recover(
             MessageHashUtils.toEthSignedMessageHash(
                 getSigningHash(msg.sender, transaction)
@@ -98,7 +116,7 @@ abstract contract BaseGasTank is
         if (!hasRole(ROLE_SIGNER, signer)) {
             revert InvalidSignature();
         }
-        _reportGasFee(transaction, feeTokenAmount);
+        _reportGasFee(transaction, feeTokenAmount, nonce);
     }
 
     function getNonce(address wallet) public view virtual returns (uint);
@@ -118,22 +136,51 @@ abstract contract BaseGasTank is
             );
     }
 
+    function getSynthesizedTransactionId1(
+        address wallet,
+        address target,
+        bytes calldata data,
+        uint256 value,
+        bool delegateCall
+    ) public pure returns (bytes32) {
+        return
+            keccak256(
+                abi.encodePacked(wallet, target, data, value, delegateCall)
+            ) &
+            0x00000000_00000000_00000000_00000000_ffffffff_ffffffff_ffffffff_ffffffff;
+    }
+
+    function getSynthesizedTransactionId2(
+        address wallet,
+        bytes32 id1,
+        uint nonce
+    ) public view returns (bytes32) {
+        // This allows determining if transaction hash in event data is real
+        return
+            (keccak256(abi.encodePacked(id1, wallet, nonce, block.chainid)) &
+                0xffffffff_ffffffff_ffffffff_ffffffff_00000000_00000000_00000000_00000000) |
+            id1;
+    }
+
     function getSynthesizedTransactionId(
         address wallet,
         address target,
         bytes calldata data,
         uint256 value,
         bool delegateCall
-    ) public view returns (bytes32) {
-        // This allows determining if transaction hash in event data is real
-        bytes32 hash = keccak256(
-            abi.encodePacked(target, data, value, delegateCall)
-        ) &
-            0x00000000_00000000_ffffffff_ffffffff_ffffffff_ffffffff_ffffffff_ffffffff;
+    ) public view notProxy returns (bytes32) {
         return
-            (keccak256(abi.encodePacked(hash, wallet, block.chainid)) &
-                0xffffffff_ffffffff_00000000_00000000_00000000_00000000_00000000_00000000) |
-            hash;
+            getSynthesizedTransactionId2(
+                wallet,
+                getSynthesizedTransactionId1(
+                    wallet,
+                    target,
+                    data,
+                    value,
+                    delegateCall
+                ),
+                getNonce(wallet)
+            );
     }
 
     function getSigningHashFromCallData(
@@ -189,7 +236,7 @@ abstract contract BaseGasTank is
         bytes calldata signature
     ) public onlyProxy returns (bytes memory) {
         uint gasBefore = gasleft();
-        bytes32 transaction = getSynthesizedTransactionId(
+        bytes32 transaction = getSynthesizedTransactionId1(
             address(this),
             target,
             data,
@@ -198,11 +245,7 @@ abstract contract BaseGasTank is
         );
         bytes memory result = delegateCall
             ? Address.functionDelegateCall(target, data)
-            : (
-                value > 0
-                    ? Address.functionCallWithValue(target, data, value)
-                    : Address.functionCall(target, data)
-            );
+            : Address.functionCallWithValue(target, data, value);
         uint feeTokenAmount = deployment().calcGasFee(gasBefore);
         reportGasFeeAndApprovePayment(transaction, feeTokenAmount, signature);
         return result;

@@ -37,12 +37,9 @@ contract LocalGasTank is BaseGasTank {
 
     function _reportGasFee(
         bytes32 transaction,
-        uint feeTokenAmount
+        uint feeTokenAmount,
+        uint nonce
     ) internal override notProxy {
-        (, uint256 nonce) = feeAccountant.getWalletRecord(
-            msg.sender,
-            block.chainid
-        );
         FeeRecord[] memory records = new FeeRecord[](1);
         records[0] = FeeRecord(
             transaction,
@@ -66,24 +63,12 @@ contract LocalGasTank is BaseGasTank {
             block.chainid
         );
         uint balance = gasToken.balanceOf(wallet);
-        uint payAmount = Math.min(
-            balance,
-            SafeCast.toUint256(
-                SignedMath.max(
-                    0,
-                    SafeCast.toInt256(feeTokenAmount) + accBalance
-                )
-            )
+        uint totalAmount = SafeCast.toUint256(
+            SignedMath.max(0, SafeCast.toInt256(feeTokenAmount) + accBalance)
         );
-        if (payAmount > 0) {
-            Address.functionDelegateCall(
-                address(feeAccountant),
-                abi.encodeWithSelector(
-                    FeeAccountantPrimary.approveAndPayFee.selector,
-                    payAmount,
-                    0
-                )
-            );
+        uint payAmount = Math.min(balance, totalAmount);
+        if (payAmount > 0 && gasToken.allowance(wallet, address(feeAccountant)) < payAmount) {
+            gasToken.approve(address(feeAccountant), payAmount);
         }
     }
 
