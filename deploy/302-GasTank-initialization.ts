@@ -13,9 +13,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const proxy = await deployments.get(PROXY_NAME);
   const proxyInstance = BaseGasTank__factory.connect(proxy.address, ownerSigner);
+
+  const FEE_NUMERATOR = hre.network.config.feeNumerator || 1n;
+  const FEE_DENOMINATOR = hre.network.config.feeDenominator || 1n;
+  const BASE_GAS = hre.network.config.baseGas || 180000n;
+
   if ((await proxyInstance.owner()) === ethers.ZeroAddress) {
     deployments.log(`Initializing ${PROXY_NAME}`);
-    await proxyInstance.initialize(1, 1, 180000, await getGasConfiguration(hre.ethers.provider)).then((x) => x.wait());
+    await proxyInstance
+      .initialize(FEE_NUMERATOR, FEE_DENOMINATOR, BASE_GAS, await getGasConfiguration(hre.ethers.provider))
+      .then((x) => x.wait());
   }
   return true;
 };

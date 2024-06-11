@@ -16,6 +16,9 @@ interface NetworkConfigExtra {
   gasTankSigner?: string;
   feeAccountantOperator?: string;
   priceFeeds?: { [chainId: number]: `0x${string}` };
+  baseGas?: bigint;
+  feeNumerator?: bigint;
+  feeDenominator?: bigint;
 }
 
 declare module "hardhat/types/config" {
@@ -68,6 +71,7 @@ const config: HardhatUserConfig = {
         80002: "0x001382149eBa3441043c1c66972b4772963f5D43",
         11155111: "0xF0d50568e3A7e8259E16663972b11910F89BD8e7",
       },
+      baseGas: 230000n,
       accounts: [],
       verify: {
         etherscan: {
