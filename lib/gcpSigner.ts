@@ -21,7 +21,6 @@ import { validateParams } from "hardhat/internal/core/jsonrpc/types/input/valida
 import { rpcTransactionRequest } from "hardhat/internal/core/jsonrpc/types/input/transactionRequest";
 import { bytesToHex } from "@nomicfoundation/ethereumjs-util";
 import { Provider as EdrProvider } from "@nomicfoundation/edr";
-import { HttpProvider } from "hardhat/internal/core/providers/http";
 
 class GcpKmsSignerV6 extends AbstractSigner {
   private readonly _signer: GcpKmsSigner;

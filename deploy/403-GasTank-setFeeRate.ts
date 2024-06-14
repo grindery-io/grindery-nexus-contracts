@@ -19,7 +19,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { _feeNumerator, _feeDenominator, _baseGas } = await proxyInstance.getFeeRate();
   if (_feeNumerator !== FEE_NUMERATOR || _feeDenominator !== FEE_DENOMINATOR || _baseGas !== BASE_GAS) {
     deployments.log(`Updating fee rate of ${PROXY_NAME}: ${FEE_NUMERATOR}/${FEE_DENOMINATOR}/${BASE_GAS}`);
-    await proxyInstance.setFeeRate(FEE_NUMERATOR, FEE_DENOMINATOR, BASE_GAS).then((x) => x.wait());
+    await proxyInstance
+      .setFeeRate(FEE_NUMERATOR, FEE_DENOMINATOR, BASE_GAS, await getGasConfiguration(hre.ethers.provider))
+      .then((x) => x.wait());
   }
 };
 func.id = DEPLOYMENT_NAME;
