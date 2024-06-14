@@ -215,11 +215,7 @@ abstract contract BaseGasTank is
         bytes calldata signature
     ) private onlyProxy {
         approvePayment(feeTokenAmount);
-        uint256 gasBefore = gasleft();
         deployment().reportGasFee(transaction, feeTokenAmount, signature);
-        if (gasleft() < gasBefore / 8) {
-            revert OutOfGas();
-        }
     }
 
     // Returns deployed implementation
