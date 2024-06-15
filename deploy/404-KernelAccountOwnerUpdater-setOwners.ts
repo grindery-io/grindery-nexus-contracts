@@ -2,19 +2,17 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { getGasConfiguration } from "../lib/gas";
 import { KernelAccountOwnerUpdater__factory } from "../typechain-types";
-import { ethers } from "hardhat";
 import _ from "lodash";
 
 const PROXY_NAME = "KernelAccountOwnerUpdater";
 const DEPLOYMENT_NAME = PROXY_NAME + "-setOwners";
 
-const OWNERS = ["0xfdac6370148ef9d2c2fbb3f54325aa99fa5ae580"].map(ethers.getAddress);
-const OWNERS_TO_DISABLE = ["0x1111111111111111111111111111111111111111"].map(ethers.getAddress);
-
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments, ethers } = hre;
   const { owner } = await getNamedAccounts();
   const ownerSigner = await ethers.getSigner(owner);
+  const OWNERS = [hre.network.config.txSigner || "0x1111111111111111111111111111111111111111"].map(ethers.getAddress);
+  const OWNERS_TO_DISABLE = (hre.network.config.txSignersToDisable || []).map(ethers.getAddress);
 
   const proxy = await deployments.get(PROXY_NAME);
   const proxyInstance = KernelAccountOwnerUpdater__factory.connect(proxy.address, ownerSigner);

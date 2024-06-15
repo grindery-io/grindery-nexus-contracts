@@ -2,7 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "hardhat-abi-exporter";
 
-import { OWNER_KMS_KEY_PATH, OWNER_ADDRESS, POLYGONSCAN_API_KEY, GAS_TANK_SIGNER_TESTNET, FEE_ACCOUNTANT_OPERATOR_TESTNET } from "./secrets";
+import { OWNER_KMS_KEY_PATH, OWNER_ADDRESS, POLYGONSCAN_API_KEY, GAS_TANK_SIGNER_TESTNET, FEE_ACCOUNTANT_OPERATOR_TESTNET, TX_SIGNER_TESTNET, TX_SIGNER_TO_DISABLE_TESTNET } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
 registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
 
@@ -19,6 +19,8 @@ interface NetworkConfigExtra {
   baseGas?: bigint;
   feeNumerator?: bigint;
   feeDenominator?: bigint;
+  txSigner?: string;
+  txSignersToDisable?: string[];
 }
 
 declare module "hardhat/types/config" {
@@ -52,6 +54,8 @@ const config: HardhatUserConfig = {
       url: `https://ethereum-sepolia.blockpi.network/v1/rpc/public`,
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       accounts: [],
+      txSigner: TX_SIGNER_TESTNET,
+      txSignersToDisable: TX_SIGNER_TO_DISABLE_TESTNET.split(","),
     },
     mumbai: {
       url: `https://rpc.ankr.com/polygon_mumbai`,
@@ -79,6 +83,8 @@ const config: HardhatUserConfig = {
           apiKey: POLYGONSCAN_API_KEY,
         },
       },
+      txSigner: TX_SIGNER_TESTNET,
+      txSignersToDisable: TX_SIGNER_TO_DISABLE_TESTNET.split(","),
     },
     chapel: {
       url: `https://rpc.ankr.com/bsc_testnet_chapel`,
