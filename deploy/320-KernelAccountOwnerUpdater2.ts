@@ -1,28 +1,24 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { getGasConfiguration } from "../lib/gas";
-import assert from "assert";
 
-const DEPLOYMENT_NAME = "KernelAccountOwnerUpdaterBeacon";
+const DEPLOYMENT_NAME = "KernelAccountOwnerUpdater2";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { getNamedAccounts, deployments, ethers } = hre;
   const { deploy } = deployments;
   const { owner } = await getNamedAccounts();
 
-  assert(typeof hre.config.deterministicDeployment === "function", "deterministicDeployment is not set");
-
   await deploy(DEPLOYMENT_NAME, {
-    contract: "UpgradeableBeacon",
+    contract: DEPLOYMENT_NAME,
+    args: ["0x9392C6a8A0b5d49cc697B8242d477509bAE16700"],
     from: owner,
-    args: [hre.config.deterministicDeployment(hre.network.name)?.factory, owner],
     log: true,
     estimateGasExtra: 10000,
     deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME))),
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
-  return true;
 };
 func.id = DEPLOYMENT_NAME;
 func.tags = [DEPLOYMENT_NAME];

@@ -27,7 +27,7 @@ export async function getGasConfiguration(provider: Provider): Promise<
     return { gasPrice: gasPrice.toString() };
   }
   return {
-    maxFeePerGas: (maxFeePerGas + ethers.parseUnits("20", "gwei")).toString(),
-    maxPriorityFeePerGas: (maxPriorityFeePerGas + ethers.parseUnits("10", "gwei")).toString(),
+    maxFeePerGas: (maxFeePerGas + ethers.parseUnits("40", "gwei")).toString(),
+    maxPriorityFeePerGas: (maxPriorityFeePerGas + ethers.parseUnits("30", "gwei")).toString(),
   };
 }

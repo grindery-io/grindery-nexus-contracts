@@ -20,37 +20,18 @@ interface IAddressBook {
     function getOwners() external view returns (address[] memory);
 }
 
-contract KernelAccountOwnerUpdater is
-    IAddressBook,
-    OnlyProxy,
-    OwnableUpgradeable
-{
+contract KernelAccountOwnerUpdater2 is IAddressBook, OnlyProxy {
     address[] public owners;
-    address[] public ownersToDisable;
     MultiECDSAValidatorNew immutable validator;
 
     constructor(
-        address deploymentAddress,
         address _validator
-    ) OnlyProxy(deploymentAddress) {
+    ) OnlyProxy(address(this)) {
         validator = MultiECDSAValidatorNew(_validator);
     }
 
-    function initialize(
-        address[] calldata _owners,
-        address[] calldata _ownersToDisable
-    ) public initializer {
-        __Context_init();
-        __Ownable_init(msg.sender);
-        setOwners(_owners, _ownersToDisable);
-    }
-
-    function setOwners(
-        address[] calldata _owners,
-        address[] calldata _ownersToDisable
-    ) public onlyOwner {
+    function setOwners(address[] calldata _owners) external notProxy {
         owners = _owners;
-        ownersToDisable = _ownersToDisable;
     }
 
     function getOwners()
@@ -63,35 +44,30 @@ contract KernelAccountOwnerUpdater is
         return owners;
     }
 
-    function getOwnersToDisable()
-        external
-        view
-        notProxy
-        returns (address[] memory)
-    {
-        return ownersToDisable;
-    }
-
-    function updateOwners() external onlyProxy {
+    function updateOwners(
+        address[] calldata _ownersToAdd,
+        address[] calldata _ownersToDisable
+    ) external onlyProxy {
+        KernelAccountOwnerUpdater2(__deploymentAddress).setOwners(_ownersToAdd);
         validator.enable(abi.encodePacked(__deploymentAddress));
-        address[] memory _ownersToDisable = KernelAccountOwnerUpdater(
-            __deploymentAddress
-        ).getOwnersToDisable();
+        KernelAccountOwnerUpdater2(__deploymentAddress).setOwners(new address[](0));
         if (_ownersToDisable.length > 0) {
             validator.disable(abi.encode(_ownersToDisable));
         }
     }
 
     function needUpdating(
-        address account
+        address account,
+        address[] calldata _ownersToAdd,
+        address[] calldata _ownersToDisable
     ) external view notProxy returns (bool) {
-        for (uint i = 0; i < owners.length; i++) {
-            if (!validator.isOwner(owners[i], account)) {
+        for (uint i = 0; i < _ownersToAdd.length; i++) {
+            if (!validator.isOwner(_ownersToAdd[i], account)) {
                 return true;
             }
         }
-        for (uint i = 0; i < ownersToDisable.length; i++) {
-            if (validator.isOwner(ownersToDisable[i], account)) {
+        for (uint i = 0; i < _ownersToDisable.length; i++) {
+            if (validator.isOwner(_ownersToDisable[i], account)) {
                 return true;
             }
         }
