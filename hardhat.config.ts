@@ -2,7 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "hardhat-abi-exporter";
 
-import { OWNER_KMS_KEY_PATH, OWNER_ADDRESS, POLYGONSCAN_API_KEY, GAS_TANK_SIGNER_TESTNET, FEE_ACCOUNTANT_OPERATOR_TESTNET, TX_SIGNER_TESTNET, TX_SIGNER_TO_DISABLE_TESTNET } from "./secrets";
+import { OWNER_KMS_KEY_PATH, OWNER_ADDRESS, POLYGONSCAN_API_KEY, GAS_TANK_SIGNER_TESTNET, FEE_ACCOUNTANT_OPERATOR_TESTNET, TX_SIGNER_TESTNET, TX_SIGNER_TO_DISABLE_TESTNET, ETHERSCAN_API_KEY } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
 registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
 
@@ -56,6 +56,11 @@ const config: HardhatUserConfig = {
       accounts: [],
       txSigner: TX_SIGNER_TESTNET,
       txSignersToDisable: TX_SIGNER_TO_DISABLE_TESTNET.split(","),
+      verify: {
+        etherscan: {
+          apiKey: ETHERSCAN_API_KEY,
+        },
+      },
     },
     mumbai: {
       url: `https://rpc.ankr.com/polygon_mumbai`,
