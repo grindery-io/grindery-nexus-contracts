@@ -20,7 +20,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [beacon.address],
     log: true,
     estimateGasExtra: 10000,
-    deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME))),
+    deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME + "V2"))),
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });

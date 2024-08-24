@@ -57,6 +57,13 @@ contract FeeAccountantPrimary is
         uint expectedNonce
     );
     error OutOfGas();
+    error InsaneFee(
+        uint chainId,
+        bytes32 transaction,
+        address wallet,
+        uint256 fee,
+        uint256 convertedFee
+    );
 
     bytes32 public constant ROLE_OPERATOR = keccak256("ROLE_OPERATOR");
 
@@ -198,6 +205,15 @@ contract FeeAccountantPrimary is
                 record.fee,
                 record.chainId
             );
+            if (convertedFee > 1000 ether) {
+                revert InsaneFee(
+                    record.chainId,
+                    record.transaction,
+                    record.wallet,
+                    record.fee,
+                    convertedFee
+                );
+            }
             int256 balance = balances[record.wallet] +
                 SafeCast.toInt256(convertedFee);
             if (balance > 0) {

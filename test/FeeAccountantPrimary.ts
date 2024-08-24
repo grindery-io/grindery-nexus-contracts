@@ -300,6 +300,23 @@ describe("FeeAccountantPrimary", function () {
       expect(balance).to.equal(SAMPLE_FEE * 3n);
       expect(nonce).to.equal(3n);
     });
+    it("Should reject obviously incorrect fee", async function () {
+      const { owner, walletUser, operator, gasTank, feeAccountantPrimary } = await loadFixture(deployFixture);
+      let { nonce, balance } = await feeAccountantPrimary.getWalletRecord(walletUser.getAddress(), 1);
+      expect(balance).to.equal(0n);
+      expect(nonce).to.equal(0n);
+      await expect(
+        feeAccountantPrimary.connect(operator).commitFees([
+          {
+            chainId: 1n,
+            wallet: walletUser.getAddress(),
+            transaction: SAMPLE_TX,
+            nonce: 0,
+            fee: SAMPLE_FEE * ethers.parseUnits("100", "gwei"),
+          },
+        ])
+      ).to.be.revertedWithCustomError(feeAccountantPrimary, "InsaneFee");
+    });
   });
   describe("Fee transfer", function () {
     it("Should transfer fee to gas tank if there is enough approved balance", async function () {
