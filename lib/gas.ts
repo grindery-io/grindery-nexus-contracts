@@ -1,7 +1,5 @@
 import { Provider, ethers } from "ethers";
 
-let nodeSupportsEIP1559: boolean | undefined = undefined;
-
 export async function getGasConfiguration(provider: Provider): Promise<
   | {
       maxFeePerGas: string;
@@ -9,25 +7,36 @@ export async function getGasConfiguration(provider: Provider): Promise<
     }
   | { gasPrice: string }
 > {
-  if ((await provider.getNetwork()).chainId === 42161n) {
-    return {
-      maxFeePerGas: ethers.parseUnits("0.11", "gwei").toString(),
-      maxPriorityFeePerGas: "0",
-    };
+  const block = await provider.getBlock("latest", true);
+  if (!block) {
+    throw new Error("No block");
   }
-  if (nodeSupportsEIP1559 === undefined) {
-    const block = await provider.getBlock("latest");
-    nodeSupportsEIP1559 = typeof block?.baseFeePerGas === "bigint";
-  }
-  let { maxFeePerGas, maxPriorityFeePerGas, gasPrice } = await provider.getFeeData();
-  if (!maxFeePerGas || !maxPriorityFeePerGas || !nodeSupportsEIP1559) {
+  if (typeof block.baseFeePerGas !== "bigint") {
+    let { gasPrice } = await provider.getFeeData();
     if (!gasPrice) {
       throw new Error("No gas price");
     }
-    return { gasPrice: gasPrice.toString() };
+    return { gasPrice: ((gasPrice * 12n) / 10n).toString() };
   }
+  const baseFee = (block.baseFeePerGas * 13n) / 10n;
+  if (block.transactions.length === 0) {
+    const extraFee = ethers.parseUnits("0.0001", "gwei");
+    return { maxFeePerGas: (baseFee + extraFee).toString(), maxPriorityFeePerGas: extraFee.toString() };
+  }
+  if (!block.prefetchedTransactions.length) {
+    throw new Error("No prefetched transactions");
+  }
+  let sum = 0n;
+  for (const tx of block.prefetchedTransactions) {
+    sum += tx.maxPriorityFeePerGas || 0n;
+  }
+  if (sum === 0n) {
+    throw new Error("No priority fee");
+  }
+  const priorityFee = ((sum / BigInt(block.prefetchedTransactions.length)) * 15n) / 10n;
+  console.log({ baseFee: ethers.formatUnits(baseFee, "gwei"), priorityFee: ethers.formatUnits(priorityFee, "gwei") });
   return {
-    maxFeePerGas: (maxFeePerGas + ethers.parseUnits("40", "gwei")).toString(),
-    maxPriorityFeePerGas: (maxPriorityFeePerGas + ethers.parseUnits("30", "gwei")).toString(),
+    maxFeePerGas: (baseFee + priorityFee).toString(),
+    maxPriorityFeePerGas: priorityFee.toString(),
   };
 }

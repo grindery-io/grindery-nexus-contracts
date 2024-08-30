@@ -2,7 +2,18 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "hardhat-abi-exporter";
 
-import { OWNER_KMS_KEY_PATH, OWNER_ADDRESS, POLYGONSCAN_API_KEY, GAS_TANK_SIGNER_TESTNET, FEE_ACCOUNTANT_OPERATOR_TESTNET, TX_SIGNER_TESTNET, TX_SIGNER_TO_DISABLE_TESTNET, ETHERSCAN_API_KEY } from "./secrets";
+import {
+  OWNER_KMS_KEY_PATH,
+  OWNER_ADDRESS,
+  POLYGONSCAN_API_KEY,
+  GAS_TANK_SIGNER_TESTNET,
+  FEE_ACCOUNTANT_OPERATOR_TESTNET,
+  TX_SIGNER_TESTNET,
+  TX_SIGNER_TO_DISABLE_TESTNET,
+  ETHERSCAN_API_KEY,
+  GAS_TANK_SIGNER,
+  FEE_ACCOUNTANT_OPERATOR,
+} from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
 registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
 
@@ -88,8 +99,6 @@ const config: HardhatUserConfig = {
           apiKey: POLYGONSCAN_API_KEY,
         },
       },
-      txSigner: TX_SIGNER_TESTNET,
-      txSignersToDisable: TX_SIGNER_TO_DISABLE_TESTNET.split(","),
     },
     chapel: {
       url: `https://rpc.ankr.com/bsc_testnet_chapel`,
@@ -97,7 +106,15 @@ const config: HardhatUserConfig = {
     },
     polygon: {
       live: true,
-      gasTokenAddress: "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904",
+      gasTokenAddress: "0xC3493D5787d4fF987d56855C64aAd60F382B5959",
+      gasTankSigner: GAS_TANK_SIGNER,
+      feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR,
+      priceFeeds: {
+        137: "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0",
+        56: "0x82a6c4AF830caa6c97bb504425f6A66165C2c26e",
+        204: "0x82a6c4AF830caa6c97bb504425f6A66165C2c26e",
+      },
+      baseGas: 230000n,
       url: `https://rpc.ankr.com/polygon`,
       accounts: [],
       verify: {
