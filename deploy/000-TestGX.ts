@@ -5,7 +5,7 @@ import { getGasConfiguration } from "../lib/gas";
 const DEPLOYMENT_NAME = "TestGX";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  if (hre.network.name !== "amoy") {
+  if (hre.network.name !== "amoy" && hre.network.name !== "polygon") {
     return true;
   }
 

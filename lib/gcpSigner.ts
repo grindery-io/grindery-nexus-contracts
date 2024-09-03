@@ -38,6 +38,18 @@ class GcpKmsSignerV6 extends AbstractSigner {
     return new GcpKmsSignerV6(this.kmsCredentials, provider || undefined);
   }
   async signTransaction(tx: ethers.TransactionRequest): Promise<string> {
+    if (tx.type == null || tx.type === 0) {
+      return await this._signer.signTransaction({
+        to: await resolveAddress(tx.to),
+        nonce: tx.nonce ? ethers.toBeHex(tx.nonce) : undefined,
+        gasLimit: tx.gasLimit ? ethers.toBeHex(tx.gasLimit) : undefined,
+        gasPrice: tx.gasPrice ? ethers.toBeHex(tx.gasPrice) : undefined,
+        value: tx.value ? ethers.toBeHex(tx.value) : undefined,
+        data: tx.data || undefined,
+        type: tx.type || undefined,
+        chainId: parseInt((tx.chainId || "")?.toString(), 10) || undefined,
+      });
+    }
     return await this._signer.signTransaction({
       ...tx,
       to: await resolveAddress(tx.to),

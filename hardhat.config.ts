@@ -13,6 +13,8 @@ import {
   ETHERSCAN_API_KEY,
   GAS_TANK_SIGNER,
   FEE_ACCOUNTANT_OPERATOR,
+  BSCSCAN_API_KEY,
+  OPBNB_API_KEY,
 } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
 registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
@@ -65,8 +67,6 @@ const config: HardhatUserConfig = {
       url: `https://ethereum-sepolia.blockpi.network/v1/rpc/public`,
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       accounts: [],
-      txSigner: TX_SIGNER_TESTNET,
-      txSignersToDisable: TX_SIGNER_TO_DISABLE_TESTNET.split(","),
       verify: {
         etherscan: {
           apiKey: ETHERSCAN_API_KEY,
@@ -83,7 +83,7 @@ const config: HardhatUserConfig = {
       },
     },
     amoy: {
-      url: `https://rpc-amoy.polygon.technology`,
+      url: `https://polygon-amoy.blockpi.network/v1/rpc/public`,
       gasTokenAddress: "0xC3493D5787d4fF987d56855C64aAd60F382B5959",
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR_TESTNET,
@@ -115,10 +115,11 @@ const config: HardhatUserConfig = {
         204: "0x82a6c4AF830caa6c97bb504425f6A66165C2c26e",
       },
       baseGas: 230000n,
-      url: `https://rpc.ankr.com/polygon`,
+      url: `https://polygon.blockpi.network/v1/rpc/public`,
       accounts: [],
       verify: {
         etherscan: {
+          apiUrl: "https://api.polygonscan.com",
           apiKey: POLYGONSCAN_API_KEY,
         },
       },
@@ -154,8 +155,27 @@ const config: HardhatUserConfig = {
     },
     bsc: {
       live: true,
-      url: `https://rpc.ankr.com/bsc`,
+      url: `https://binance.llamarpc.com`,
+      gasTankSigner: GAS_TANK_SIGNER,
       accounts: [],
+      verify: {
+        etherscan: {
+          apiUrl: "https://api.bscscan.com",
+          apiKey: BSCSCAN_API_KEY,
+        },
+      },
+    },
+    opbnb: {
+      live: true,
+      url: `https://opbnb.drpc.org`,
+      gasTankSigner: GAS_TANK_SIGNER,
+      accounts: [],
+      verify: {
+        etherscan: {
+          apiUrl: "https://api-opbnb.bscscan.com",
+          apiKey: OPBNB_API_KEY,
+        },
+      },
     },
     eth: {
       live: true,

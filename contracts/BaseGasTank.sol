@@ -82,7 +82,11 @@ abstract contract BaseGasTank is
     }
 
     function calcGasFee(uint gasBefore) external view notProxy returns (uint) {
+        uint nonce = getNonce(msg.sender);
         uint gasused = gasBefore - gasleft() + baseGas;
+        if (nonce == 0) {
+            gasused += 500000; // Wallet creation fee
+        }
         uint txfee = tx.gasprice * gasused;
         uint feeTokenAmount = Math.mulDiv(txfee, feeNumerator, feeDenominator);
         return feeTokenAmount;

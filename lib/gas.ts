@@ -11,7 +11,7 @@ export async function getGasConfiguration(provider: Provider): Promise<
   if (!block) {
     throw new Error("No block");
   }
-  if (typeof block.baseFeePerGas !== "bigint") {
+  if (typeof block.baseFeePerGas !== "bigint" || block.baseFeePerGas === 0n) {
     let { gasPrice } = await provider.getFeeData();
     if (!gasPrice) {
       throw new Error("No gas price");
@@ -26,15 +26,18 @@ export async function getGasConfiguration(provider: Provider): Promise<
   if (!block.prefetchedTransactions.length) {
     throw new Error("No prefetched transactions");
   }
-  let sum = 0n;
+  let sum = 1n;
   for (const tx of block.prefetchedTransactions) {
-    sum += tx.maxPriorityFeePerGas || 0n;
-  }
-  if (sum === 0n) {
-    throw new Error("No priority fee");
+    if (tx.gasPrice) {
+      sum += tx.gasPrice - block.baseFeePerGas;
+      if (sum < 0n) {
+        sum = 1n;
+      }
+    } else {
+      sum += tx.maxPriorityFeePerGas === null ? 0n : tx.maxPriorityFeePerGas || 1n;
+    }
   }
   const priorityFee = ((sum / BigInt(block.prefetchedTransactions.length)) * 15n) / 10n;
-  console.log({ baseFee: ethers.formatUnits(baseFee, "gwei"), priorityFee: ethers.formatUnits(priorityFee, "gwei") });
   return {
     maxFeePerGas: (baseFee + priorityFee).toString(),
     maxPriorityFeePerGas: priorityFee.toString(),

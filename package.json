@@ -20,7 +20,7 @@
     "@tsconfig/node20": "^20.1.4",
     "@types/lodash": "^4.17.5",
     "dotenv": "^16.4.5",
-    "ethers": "^6.12.1",
+    "ethers": "^6.13.2",
     "ethers-gcp-kms-signer": "^1.1.6",
     "hardhat": "^2.22.4",
     "hardhat-abi-exporter": "^2.10.1",

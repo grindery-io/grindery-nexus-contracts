@@ -140,7 +140,22 @@ describe("LocalGasTank", function () {
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
-    const tankReceived = await testErc20.balanceOf(gasTank.getAddress());
+    const tankReceivedInitial = await testErc20.balanceOf(gasTank.getAddress());
+    expect(tankReceivedInitial).to.be.greaterThan(0n);
+
+    await expect(
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
+      )
+    )
+      .to.emit(feeAccountantPrimary, "BalanceUpdated")
+      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), anyValue, 1n, anyValue, 0n)
+      .and.to.emit(sampleContract, "SampleEvent")
+      .withArgs(await sampleSmartWallet.getAddress());
+
+    const tankReceived = (await testErc20.balanceOf(gasTank.getAddress())) - tankReceivedInitial;
     expect(tankReceived).to.be.greaterThan(0n);
 
     await expect(
@@ -156,7 +171,7 @@ describe("LocalGasTank", function () {
         anyValue,
         await sampleSmartWallet.getAddress(),
         closeTo(tankReceived, ethers.parseUnits("5", "gwei")),
-        1n,
+        2n,
         closeTo(tankReceived, ethers.parseUnits("5", "gwei")),
         0n
       )
@@ -185,7 +200,7 @@ describe("LocalGasTank", function () {
         anyValue,
         await sampleSmartWallet.getAddress(),
         combine(closeTo(tankReceived, ethers.parseUnits("5", "gwei")), s.save, s.save),
-        2n,
+        3n,
         s.check(),
         s.check((actual, stored) => actual === stored - 100n)
       )
@@ -255,7 +270,22 @@ describe("LocalGasTank", function () {
       .and.to.emit(sampleContract, "SampleEvent")
       .withArgs(await sampleSmartWallet.getAddress());
 
-    const tankReceived = await testErc20.balanceOf(gasTank.getAddress());
+    const tankReceivedInitial = await testErc20.balanceOf(gasTank.getAddress());
+    expect(tankReceivedInitial).to.be.greaterThan(0n);
+
+    await expect(
+      gasTankExecute(
+        await sampleContract.getAddress(),
+        sampleContract.interface.encodeFunctionData("sampleMethod"),
+        false
+      )
+    )
+      .to.emit(feeAccountantPrimary, "BalanceUpdated")
+      .withArgs(CHAIN_ID, anyValue, await sampleSmartWallet.getAddress(), anyValue, 1n, anyValue, 0n)
+      .and.to.emit(sampleContract, "SampleEvent")
+      .withArgs(await sampleSmartWallet.getAddress());
+
+    const tankReceived = (await testErc20.balanceOf(gasTank.getAddress())) - tankReceivedInitial;
     expect(tankReceived).to.be.greaterThan(0n);
 
     const s = slot<bigint>();
@@ -277,7 +307,7 @@ describe("LocalGasTank", function () {
         anyValue,
         await sampleSmartWallet.getAddress(),
         combine(closeTo(tankReceived * 2n, ethers.parseUnits("5", "gwei")), s.save),
-        1n,
+        2n,
         s.check(),
         0n
       )
@@ -301,7 +331,7 @@ describe("LocalGasTank", function () {
         anyValue,
         await sampleSmartWallet.getAddress(),
         combine(closeTo((tankReceived * 3n) / 2n, ethers.parseUnits("5", "gwei")), s.save),
-        2n,
+        3n,
         s.check(),
         0n
       )
