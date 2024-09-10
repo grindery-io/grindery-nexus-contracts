@@ -1,26 +1,26 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { getGasConfiguration } from "../lib/gas";
+import { EntryPoint } from "userop/dist/v06";
 
-const DEPLOYMENT_NAME = "KernelAccountOwnerUpdater2";
+const DEPLOYMENT_NAME = "Kernel";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  return true; // Disable until we need to update the contract
-
   const { getNamedAccounts, deployments, ethers } = hre;
   const { deploy } = deployments;
   const { owner } = await getNamedAccounts();
 
   await deploy(DEPLOYMENT_NAME, {
-    contract: DEPLOYMENT_NAME,
-    args: ["0x9392C6a8A0b5d49cc697B8242d477509bAE16700"],
+    contract: "Kernel",
     from: owner,
+    args: [EntryPoint.DEFAULT_ADDRESS],
     log: true,
     estimateGasExtra: 10000,
     deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME))),
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
+  return true;
 };
 func.id = DEPLOYMENT_NAME;
 func.tags = [DEPLOYMENT_NAME];

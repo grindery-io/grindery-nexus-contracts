@@ -4,29 +4,13 @@ pragma solidity 0.8.25;
 
 import "./OnlyProxy.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-
-interface MultiECDSAValidatorNew {
-    function isOwner(
-        address owner,
-        address kernel
-    ) external view returns (bool);
-
-    function enable(bytes calldata _data) external payable;
-
-    function disable(bytes calldata _data) external payable;
-}
-
-interface IAddressBook {
-    function getOwners() external view returns (address[] memory);
-}
+import "./kernel/validator/MultiECDSAValidatorNew.sol";
 
 contract KernelAccountOwnerUpdater2 is IAddressBook, OnlyProxy {
     address[] public owners;
     MultiECDSAValidatorNew immutable validator;
 
-    constructor(
-        address _validator
-    ) OnlyProxy(address(this)) {
+    constructor(address _validator) OnlyProxy(address(this)) {
         validator = MultiECDSAValidatorNew(_validator);
     }
 
@@ -50,7 +34,9 @@ contract KernelAccountOwnerUpdater2 is IAddressBook, OnlyProxy {
     ) external onlyProxy {
         KernelAccountOwnerUpdater2(__deploymentAddress).setOwners(_ownersToAdd);
         validator.enable(abi.encodePacked(__deploymentAddress));
-        KernelAccountOwnerUpdater2(__deploymentAddress).setOwners(new address[](0));
+        KernelAccountOwnerUpdater2(__deploymentAddress).setOwners(
+            new address[](0)
+        );
         if (_ownersToDisable.length > 0) {
             validator.disable(abi.encode(_ownersToDisable));
         }

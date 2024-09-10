@@ -9,7 +9,6 @@ import {
   GAS_TANK_SIGNER_TESTNET,
   FEE_ACCOUNTANT_OPERATOR_TESTNET,
   TX_SIGNER_TESTNET,
-  TX_SIGNER_TO_DISABLE_TESTNET,
   ETHERSCAN_API_KEY,
   GAS_TANK_SIGNER,
   FEE_ACCOUNTANT_OPERATOR,
@@ -33,7 +32,6 @@ interface NetworkConfigExtra {
   feeNumerator?: bigint;
   feeDenominator?: bigint;
   txSigner?: string;
-  txSignersToDisable?: string[];
 }
 
 declare module "hardhat/types/config" {
@@ -66,6 +64,7 @@ const config: HardhatUserConfig = {
     sepolia: {
       url: `https://ethereum-sepolia.blockpi.network/v1/rpc/public`,
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
+      txSigner: TX_SIGNER_TESTNET,
       accounts: [],
       verify: {
         etherscan: {
@@ -87,6 +86,7 @@ const config: HardhatUserConfig = {
       gasTokenAddress: "0xC3493D5787d4fF987d56855C64aAd60F382B5959",
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR_TESTNET,
+      txSigner: TX_SIGNER_TESTNET,
       priceFeeds: {
         80002: "0x001382149eBa3441043c1c66972b4772963f5D43",
         11155111: "0xF0d50568e3A7e8259E16663972b11910F89BD8e7",
@@ -110,6 +110,7 @@ const config: HardhatUserConfig = {
       gasTankSigner: GAS_TANK_SIGNER,
       feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR,
       priceFeeds: {
+        1: "0xF9680D99D6C9589e2a93a78A04A279e509205945",
         137: "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0",
         56: "0x82a6c4AF830caa6c97bb504425f6A66165C2c26e",
         204: "0x82a6c4AF830caa6c97bb504425f6A66165C2c26e",
@@ -179,8 +180,14 @@ const config: HardhatUserConfig = {
     },
     eth: {
       live: true,
-      url: `https://rpc.ankr.com/eth`,
+      url: `https://ethereum.blockpi.network/v1/rpc/public`,
+      gasTankSigner: GAS_TANK_SIGNER,
       accounts: [],
+      verify: {
+        etherscan: {
+          apiKey: ETHERSCAN_API_KEY,
+        },
+      },
     },
     arbitrum: {
       live: true,
@@ -239,6 +246,7 @@ const config: HardhatUserConfig = {
     clear: true,
     flat: true,
     format: "json",
+    except: ["Ownable.sol", "ECDSA.sol"],
   },
 };
 

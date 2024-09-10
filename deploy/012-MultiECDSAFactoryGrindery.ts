@@ -1,20 +1,22 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { getGasConfiguration } from "../lib/gas";
+import { EntryPoint } from "userop/dist/v06";
 
-const DEPLOYMENT_NAME = "KernelAccountOwnerUpdater2";
+const DEPLOYMENT_NAME = "MultiECDSAFactoryGrindery";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  return true; // Disable until we need to update the contract
-
   const { getNamedAccounts, deployments, ethers } = hre;
   const { deploy } = deployments;
   const { owner } = await getNamedAccounts();
 
+  const kernel = await deployments.get("Kernel");
+  const validator = await deployments.get("MultiECDSAValidatorNew");
+
   await deploy(DEPLOYMENT_NAME, {
     contract: DEPLOYMENT_NAME,
-    args: ["0x9392C6a8A0b5d49cc697B8242d477509bAE16700"],
     from: owner,
+    args: [owner, EntryPoint.DEFAULT_ADDRESS, kernel.address, validator.address],
     log: true,
     estimateGasExtra: 10000,
     deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME))),
@@ -24,5 +26,5 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 func.id = DEPLOYMENT_NAME;
 func.tags = [DEPLOYMENT_NAME];
-func.dependencies = [];
+func.dependencies = ["Kernel", "MultiECDSAValidatorNew"];
 export default func;
