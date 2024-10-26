@@ -14,6 +14,7 @@ import {
   FEE_ACCOUNTANT_OPERATOR,
   BSCSCAN_API_KEY,
   OPBNB_API_KEY,
+  TX_SIGNER,
 } from "./secrets";
 import { registerSigner } from "./lib/gcpSigner";
 registerSigner(OWNER_ADDRESS, OWNER_KMS_KEY_PATH);
@@ -101,7 +102,9 @@ const config: HardhatUserConfig = {
       },
     },
     chapel: {
-      url: `https://rpc.ankr.com/bsc_testnet_chapel`,
+      url: `https://bsc-testnet.public.blastapi.io`,
+      gasTankSigner: GAS_TANK_SIGNER_TESTNET,
+      txSigner: TX_SIGNER_TESTNET,
       accounts: [],
     },
     polygon: {
@@ -109,6 +112,7 @@ const config: HardhatUserConfig = {
       gasTokenAddress: "0xC3493D5787d4fF987d56855C64aAd60F382B5959",
       gasTankSigner: GAS_TANK_SIGNER,
       feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR,
+      txSigner: TX_SIGNER,
       priceFeeds: {
         1: "0xF9680D99D6C9589e2a93a78A04A279e509205945",
         137: "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0",
@@ -156,8 +160,9 @@ const config: HardhatUserConfig = {
     },
     bsc: {
       live: true,
-      url: `https://binance.llamarpc.com`,
+      url: `https://bsc.blockpi.network/v1/rpc/public`,
       gasTankSigner: GAS_TANK_SIGNER,
+      txSigner: TX_SIGNER,
       accounts: [],
       verify: {
         etherscan: {
@@ -168,8 +173,9 @@ const config: HardhatUserConfig = {
     },
     opbnb: {
       live: true,
-      url: `https://opbnb.drpc.org`,
+      url: `https://opbnb-rpc.publicnode.com`,
       gasTankSigner: GAS_TANK_SIGNER,
+      txSigner: TX_SIGNER,
       accounts: [],
       verify: {
         etherscan: {
@@ -182,6 +188,7 @@ const config: HardhatUserConfig = {
       live: true,
       url: `https://ethereum.blockpi.network/v1/rpc/public`,
       gasTankSigner: GAS_TANK_SIGNER,
+      txSigner: TX_SIGNER,
       accounts: [],
       verify: {
         etherscan: {
