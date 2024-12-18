@@ -242,6 +242,37 @@ describe("LocalGasTank", function () {
 
     expect(await owner.provider.getBalance(await sampleContract.getAddress())).to.equal(ethers.parseEther("1"));
   });
+  it("Should allow sending native token to EOA", async function () {
+    const {
+      owner,
+      signer,
+      gasTank,
+      sampleSmartWallet,
+      sampleContract,
+      testErc20,
+      feeAccountantPrimary,
+      CHAIN_ID,
+      gasTankExecute,
+    } = await loadFixture(deployFixture);
+    expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(0n);
+
+    const eoaAddress = "0x1111111111111111111111111111111111111111";
+
+    await owner.sendTransaction({
+      to: await sampleSmartWallet.getAddress(),
+      data: sampleSmartWallet.interface.encodeFunctionData("sampleMethod"),
+      value: ethers.parseEther("2"),
+    });
+
+    expect(await owner.provider.getBalance(eoaAddress)).to.equal(0n);
+
+    await expect(gasTankExecute(eoaAddress, "0x", false, ethers.parseEther("1"))).to.emit(
+      feeAccountantPrimary,
+      "BalanceUpdated"
+    );
+
+    expect(await owner.provider.getBalance(eoaAddress)).to.equal(ethers.parseEther("1"));
+  });
   it("Should allow fee scaling", async function () {
     const {
       owner,

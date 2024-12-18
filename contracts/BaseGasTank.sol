@@ -104,7 +104,11 @@ abstract contract BaseGasTank is
         bytes calldata signature
     ) external notProxy {
         uint nonce = getNonce(msg.sender);
-        if (transaction & 0xffffffff_ffffffff_ffffffff_ffffffff_00000000_00000000_00000000_00000000 == 0) {
+        if (
+            transaction &
+                0xffffffff_ffffffff_ffffffff_ffffffff_00000000_00000000_00000000_00000000 ==
+            0
+        ) {
             transaction = getSynthesizedTransactionId2(
                 msg.sender,
                 transaction,
@@ -243,9 +247,14 @@ abstract contract BaseGasTank is
             value,
             delegateCall
         );
-        bytes memory result = delegateCall
-            ? Address.functionDelegateCall(target, data)
-            : Address.functionCallWithValue(target, data, value);
+        bytes memory result = "";
+        if (delegateCall) {
+            result = Address.functionDelegateCall(target, data);
+        } else if (data.length == 0) {
+            Address.sendValue(payable(target), value);
+        } else {
+            result = Address.functionCallWithValue(target, data, value);
+        }
         uint feeTokenAmount = deployment().calcGasFee(gasBefore);
         reportGasFeeAndApprovePayment(transaction, feeTokenAmount, signature);
         return result;

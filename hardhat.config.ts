@@ -63,7 +63,7 @@ const config: HardhatUserConfig = {
       accounts: [],
     },
     sepolia: {
-      url: `https://ethereum-sepolia.blockpi.network/v1/rpc/public`,
+      url: `https://sepolia.gateway.tenderly.co`,
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       txSigner: TX_SIGNER_TESTNET,
       accounts: [],
@@ -83,7 +83,7 @@ const config: HardhatUserConfig = {
       },
     },
     amoy: {
-      url: `https://polygon-amoy.blockpi.network/v1/rpc/public`,
+      url: `https://polygon-amoy.gateway.tenderly.co`,
       gasTokenAddress: "0xC3493D5787d4fF987d56855C64aAd60F382B5959",
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR_TESTNET,
@@ -120,7 +120,7 @@ const config: HardhatUserConfig = {
         204: "0x82a6c4AF830caa6c97bb504425f6A66165C2c26e",
       },
       baseGas: 230000n,
-      url: `https://polygon.blockpi.network/v1/rpc/public`,
+      url: `https://gateway.tenderly.co/public/polygon`,
       accounts: [],
       verify: {
         etherscan: {
@@ -160,7 +160,7 @@ const config: HardhatUserConfig = {
     },
     bsc: {
       live: true,
-      url: `https://bsc.blockpi.network/v1/rpc/public`,
+      url: `https://bsc.blockrazor.xyz`,
       gasTankSigner: GAS_TANK_SIGNER,
       txSigner: TX_SIGNER,
       accounts: [],
