@@ -242,6 +242,62 @@ describe("LocalGasTank", function () {
 
     expect(await owner.provider.getBalance(await sampleContract.getAddress())).to.equal(ethers.parseEther("1"));
   });
+  it("Should allow calling aggregate3Value", async function () {
+    const {
+      owner,
+      signer,
+      gasTank,
+      sampleSmartWallet,
+      sampleContract,
+      testErc20,
+      feeAccountantPrimary,
+      CHAIN_ID,
+      gasTankExecute,
+    } = await loadFixture(deployFixture);
+    expect(await testErc20.balanceOf(gasTank.getAddress())).to.equal(0n);
+
+    const abi = [
+      "function aggregate3Value(tuple(address target, bool allowFailure, uint256 value, bytes callData)[] calls) payable returns (tuple(bool success, bytes returnData)[] returnData)",
+    ];
+    const multicall3 = new ethers.Interface(abi);
+
+    await owner.sendTransaction({
+      to: await sampleSmartWallet.getAddress(),
+      data: sampleSmartWallet.interface.encodeFunctionData("sampleMethod"),
+      value: ethers.parseEther("2"),
+    });
+
+    expect(await owner.provider.getBalance(await sampleContract.getAddress())).to.equal(0n);
+
+    await expect(
+      gasTankExecute(
+        "0xcA11bde05977b3631167028862bE2a173976CA11",
+        multicall3.encodeFunctionData("aggregate3Value", [
+          [
+            {
+              target: await sampleContract.getAddress(),
+              allowFailure: false,
+              value: ethers.parseEther("1"),
+              callData: sampleContract.interface.encodeFunctionData("sampleMethod"),
+            },
+            {
+              target: await sampleContract.getAddress(),
+              allowFailure: false,
+              value: ethers.parseEther("1"),
+              callData: sampleContract.interface.encodeFunctionData("sampleMethod"),
+            },
+          ],
+        ]),
+        true,
+        ethers.parseEther("2")
+      )
+    )
+      .and.to.emit(sampleContract, "SampleEvent")
+      .withArgs(await sampleSmartWallet.getAddress());
+
+    expect(await owner.provider.getBalance(await sampleContract.getAddress())).to.equal(ethers.parseEther("2"));
+    expect(await owner.provider.getBalance(await sampleSmartWallet.getAddress())).to.equal(ethers.parseEther("0"));
+  });
   it("Should allow sending native token to EOA", async function () {
     const {
       owner,
