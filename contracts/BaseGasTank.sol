@@ -56,6 +56,7 @@ abstract contract BaseGasTank is
     error OutOfGas();
 
     error Aggregate3ValueNotEnoughBalance(uint256 value, uint256 balance);
+    error Aggregate3ValueCallFailure(uint256 index, bytes reason);
     error Aggregate3ValueValueMismatch(
         uint256 expectedValue,
         uint256 actualValue
@@ -266,32 +267,8 @@ abstract contract BaseGasTank is
             (result.success, result.returnData) = calli.target.call{value: val}(
                 calli.callData
             );
-            assembly {
-                // Revert if the call fails and failure is not allowed
-                // `allowFailure := calldataload(add(calli, 0x20))` and `success := mload(result)`
-                if iszero(or(calldataload(add(calli, 0x20)), mload(result))) {
-                    // set "Error(string)" signature: bytes32(bytes4(keccak256("Error(string)")))
-                    mstore(
-                        0x00,
-                        0x08c379a000000000000000000000000000000000000000000000000000000000
-                    )
-                    // set data offset
-                    mstore(
-                        0x04,
-                        0x0000000000000000000000000000000000000000000000000000000000000020
-                    )
-                    // set length of revert string
-                    mstore(
-                        0x24,
-                        0x0000000000000000000000000000000000000000000000000000000000000017
-                    )
-                    // set revert string: bytes32(abi.encodePacked("Multicall3: call failed"))
-                    mstore(
-                        0x44,
-                        0x4d756c746963616c6c333a2063616c6c206661696c6564000000000000000000
-                    )
-                    revert(0x00, 0x84)
-                }
+            if (!result.success && !calli.allowFailure) {
+                revert Aggregate3ValueCallFailure(i, result.returnData);
             }
             unchecked {
                 ++i;
@@ -316,6 +293,7 @@ abstract contract BaseGasTank is
             delegateCall
         );
         bytes memory result = "";
+        bool handled = false;
         if (
             target == 0xcA11bde05977b3631167028862bE2a173976CA11 && delegateCall
         ) {
@@ -341,8 +319,10 @@ abstract contract BaseGasTank is
                     uint256 actualValue = oldBalance - newBalance;
                     revert Aggregate3ValueValueMismatch(value, actualValue);
                 }
+                handled = true;
             }
-        } else {
+        }
+        if (!handled) {
             if (delegateCall) {
                 result = Address.functionDelegateCall(target, data);
             } else if (data.length == 0) {
