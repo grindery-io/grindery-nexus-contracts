@@ -23,6 +23,7 @@ import "hardhat-deploy";
 import { ethers } from "ethers";
 
 import "./tasks/refund";
+import "./tasks/sandbox";
 
 interface NetworkConfigExtra {
   gasTokenAddress?: `0x${string}`;
@@ -33,6 +34,12 @@ interface NetworkConfigExtra {
   feeNumerator?: bigint;
   feeDenominator?: bigint;
   txSigner?: string;
+  gasPrice?: bigint;
+  stage2Fee?: {
+    fixedFee: bigint;
+    feeNumerator: bigint;
+    feeDenominator: bigint;
+  };
 }
 
 declare module "hardhat/types/config" {
@@ -83,14 +90,21 @@ const config: HardhatUserConfig = {
       },
     },
     amoy: {
-      url: `https://polygon-amoy.gateway.tenderly.co`,
+      url: `https://polygon-amoy.drpc.org`,
       gasTokenAddress: "0xC3493D5787d4fF987d56855C64aAd60F382B5959",
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR_TESTNET,
       txSigner: TX_SIGNER_TESTNET,
       priceFeeds: {
+        0: "0x1b8739bB4CdF0089d07097A9Ae5Bd274b29C6F16", // Use USDC as anchor
         80002: "0x001382149eBa3441043c1c66972b4772963f5D43",
         11155111: "0xF0d50568e3A7e8259E16663972b11910F89BD8e7",
+        9007199254740990: "0x1b8739bB4CdF0089d07097A9Ae5Bd274b29C6F16", // TON, no Chainlink feed so using USDC feed
+      },
+      stage2Fee: {
+        fixedFee: ethers.parseEther("0.015"),
+        feeNumerator: 1000n,
+        feeDenominator: 49n,
       },
       baseGas: 230000n,
       accounts: [],
@@ -114,10 +128,17 @@ const config: HardhatUserConfig = {
       feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR,
       txSigner: TX_SIGNER,
       priceFeeds: {
+        0: "0xfE4A8cc5b5B2366C1B58Bea3858e81843581b2F7", // Use USDC as anchor
         1: "0xF9680D99D6C9589e2a93a78A04A279e509205945",
         137: "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0",
         56: "0x82a6c4AF830caa6c97bb504425f6A66165C2c26e",
         204: "0x82a6c4AF830caa6c97bb504425f6A66165C2c26e",
+        9007199254740990: "0xfE4A8cc5b5B2366C1B58Bea3858e81843581b2F7", // TON, no Chainlink feed so using USDC feed
+      },
+      stage2Fee: {
+        fixedFee: ethers.parseEther("0.015"),
+        feeNumerator: 1000n,
+        feeDenominator: 49n,
       },
       baseGas: 230000n,
       url: `https://gateway.tenderly.co/public/polygon`,

@@ -64,10 +64,21 @@ contract LocalGasTank is BaseGasTank {
         );
         uint balance = gasToken.balanceOf(wallet);
         uint totalAmount = SafeCast.toUint256(
-            SignedMath.max(0, SafeCast.toInt256(feeTokenAmount) + accBalance)
+            SignedMath.max(
+                0,
+                SafeCast.toInt256(
+                    feeAccountant.foreignFeeToLocalFee(
+                        feeTokenAmount,
+                        block.chainid
+                    )
+                ) + accBalance
+            )
         );
         uint payAmount = Math.min(balance, totalAmount);
-        if (payAmount > 0 && gasToken.allowance(wallet, address(feeAccountant)) < payAmount) {
+        if (
+            payAmount > 0 &&
+            gasToken.allowance(wallet, address(feeAccountant)) < payAmount
+        ) {
             gasToken.approve(address(feeAccountant), payAmount);
         }
     }

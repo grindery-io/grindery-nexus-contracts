@@ -48,6 +48,7 @@ describe("LocalGasTank", function () {
     const priceFeedLocal = await MockV3Aggregator.deploy(8, 1n * 10n ** 8n);
     const CHAIN_ID = await owner.provider.getNetwork().then((x) => x.chainId);
     await feeAccountantPrimary.setPriceFeed(CHAIN_ID, priceFeedLocal.getAddress()).then((x) => x.wait());
+    await feeAccountantPrimary.setPriceFeed(0, priceFeedLocal.getAddress()).then((x) => x.wait());
 
     const SampleSmartWallet = await ethers.getContractFactory("SampleSmartWallet");
     const sampleSmartWallet = await SampleSmartWallet.deploy();

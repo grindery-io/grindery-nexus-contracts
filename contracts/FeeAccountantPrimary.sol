@@ -77,6 +77,10 @@ contract FeeAccountantPrimary is
     mapping(address => int256) private balances;
     mapping(bytes32 => uint256) private nonces;
 
+    uint256 stage2FixedFee = 0;
+    uint256 stage2ScaleNumerator = 0;
+    uint256 stage2ScaleDenominator = 0;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
         address deploymentAddress,
@@ -105,6 +109,25 @@ contract FeeAccountantPrimary is
         priceFeeds[chainId] = instance;
     }
 
+    function setStage2Fee(
+        uint256 fixedFee,
+        uint256 feeNumerator,
+        uint256 feeDenominator
+    ) external onlyOwner {
+        require(feeDenominator > 0, "Invalid fee denominator");
+        stage2FixedFee = fixedFee;
+        stage2ScaleNumerator = feeNumerator;
+        stage2ScaleDenominator = feeDenominator;
+    }
+
+    function getStage2Fee()
+        external
+        view
+        returns (uint256 fixedFee, uint256 feeNumerator, uint256 feeDenominator)
+    {
+        return (stage2FixedFee, stage2ScaleNumerator, stage2ScaleDenominator);
+    }
+
     function getPriceFeed(uint chainId) external view returns (address) {
         return address(priceFeeds[chainId]);
     }
@@ -112,28 +135,32 @@ contract FeeAccountantPrimary is
     function foreignFeeToLocalFee(
         uint256 fee,
         uint chainId
-    ) public view returns (uint256) {
-        if (chainId == block.chainid) {
-            // Gas optimization
-            return fee;
-        }
+    ) public view returns (uint256 convertedFee) {
         AggregatorV3Interface foreign = priceFeeds[chainId];
-        AggregatorV3Interface local = priceFeeds[block.chainid];
+        AggregatorV3Interface local = priceFeeds[0];
         if (address(foreign) == address(0)) {
             revert UnsupportedChain(chainId);
         }
         if (address(local) == address(0)) {
-            revert UnsupportedChain(block.chainid);
+            revert UnsupportedChain(0);
         }
         (, int256 foreignPrice, , , ) = foreign.latestRoundData();
         (, int256 localPrice, , , ) = local.latestRoundData();
-        return
-            Math.mulDiv(
-                fee,
-                SafeCast.toUint256(foreignPrice),
-                SafeCast.toUint256(localPrice),
+        convertedFee = Math.mulDiv(
+            fee,
+            SafeCast.toUint256(foreignPrice),
+            SafeCast.toUint256(localPrice),
+            Math.Rounding.Trunc
+        );
+        if (stage2ScaleDenominator > 0) {
+            convertedFee = Math.mulDiv(
+                convertedFee + stage2FixedFee,
+                stage2ScaleNumerator,
+                stage2ScaleDenominator,
                 Math.Rounding.Trunc
             );
+        }
+        return convertedFee;
     }
 
     function getNonceKey(

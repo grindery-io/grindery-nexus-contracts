@@ -38,6 +38,7 @@ describe("FeeAccountantPrimary", function () {
     const priceFeedLocal = await MockV3Aggregator.deploy(8, 1n * 10n ** 8n);
     const CHAIN_ID = await owner.provider.getNetwork().then((x) => x.chainId);
     await feeAccountantPrimary.setPriceFeed(CHAIN_ID, priceFeedLocal.getAddress()).then((x) => x.wait());
+    await feeAccountantPrimary.setPriceFeed(0, priceFeedLocal.getAddress()).then((x) => x.wait());
 
     const priceFeedDefaultForeign = await MockV3Aggregator.deploy(8, 1n * 10n ** 8n);
     await feeAccountantPrimary.setPriceFeed(1, priceFeedDefaultForeign.getAddress()).then((x) => x.wait());
@@ -96,6 +97,38 @@ describe("FeeAccountantPrimary", function () {
         .withArgs(1n, SAMPLE_TX, walletUser.getAddress(), SAMPLE_FEE, 0n, SAMPLE_FEE, SAMPLE_FEE);
       ({ nonce, balance } = await feeAccountantPrimary.getWalletRecord(walletUser.getAddress(), 1));
       expect(balance).to.equal(SAMPLE_FEE);
+      expect(nonce).to.equal(1n);
+    });
+    it("Should record fee after applying stage2 rate", async function () {
+      const { owner, walletUser, operator, gasTank, feeAccountantPrimary } = await loadFixture(deployFixture);
+      await feeAccountantPrimary.setStage2Fee(123n, 3n, 2n);
+      let { nonce, balance } = await feeAccountantPrimary.getWalletRecord(walletUser.getAddress(), 1);
+      expect(balance).to.equal(0n);
+      expect(nonce).to.equal(0n);
+      const SAMPLE_FEE_AFTER_STAGE2 = ((SAMPLE_FEE + 123n) * 3n) / 2n;
+      await expect(
+        feeAccountantPrimary.connect(operator).commitFees([
+          {
+            chainId: 1n,
+            wallet: walletUser.getAddress(),
+            transaction: SAMPLE_TX,
+            nonce: 0,
+            fee: SAMPLE_FEE,
+          },
+        ])
+      )
+        .to.emit(feeAccountantPrimary, "BalanceUpdated")
+        .withArgs(
+          1n,
+          SAMPLE_TX,
+          walletUser.getAddress(),
+          SAMPLE_FEE,
+          0n,
+          SAMPLE_FEE_AFTER_STAGE2,
+          SAMPLE_FEE_AFTER_STAGE2
+        );
+      ({ nonce, balance } = await feeAccountantPrimary.getWalletRecord(walletUser.getAddress(), 1));
+      expect(balance).to.equal(SAMPLE_FEE_AFTER_STAGE2);
       expect(nonce).to.equal(1n);
     });
     it("Should record fee in batch", async function () {
