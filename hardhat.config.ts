@@ -40,6 +40,8 @@ interface NetworkConfigExtra {
     feeNumerator: bigint;
     feeDenominator: bigint;
   };
+  gxTokenAddress?: string;
+  gxTonBridgeOperator?: string;
 }
 
 declare module "hardhat/types/config" {
