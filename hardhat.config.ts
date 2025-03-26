@@ -23,7 +23,6 @@ import "hardhat-deploy";
 import { ethers } from "ethers";
 
 import "./tasks/refund";
-import "./tasks/sandbox";
 
 interface NetworkConfigExtra {
   gasTokenAddress?: `0x${string}`;

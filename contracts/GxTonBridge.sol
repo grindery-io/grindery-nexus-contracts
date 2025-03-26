@@ -29,6 +29,7 @@ contract GxTonBridge is ReentrancyGuard, Ownable, AccessControl, OnlyProxy {
     );
 
     error TransactionAlreadyClaimed(bytes32 transactionHash);
+    error InvalidSender();
     error InvalidSignature();
     error InvalidNonce(uint nonce, uint expectedNonce);
 
@@ -52,6 +53,9 @@ contract GxTonBridge is ReentrancyGuard, Ownable, AccessControl, OnlyProxy {
         int32 tonWorkchainId,
         bytes32 tonAccountId
     ) external {
+        if (msg.sender == address(this)) {
+            revert InvalidSender();
+        }
         SafeERC20.safeTransferFrom(gxToken, msg.sender, address(this), amount);
         emit BridgeToTon(msg.sender, amount, tonWorkchainId, tonAccountId);
     }
