@@ -142,6 +142,9 @@ const config: HardhatUserConfig = {
         feeDenominator: 49n,
       },
       baseGas: 230000n,
+
+      gxTokenAddress: "0x8730762Cad4a27816A467fAc54e3dd1E2e9617A1",
+      gxTonBridgeOperator: "0x318f6E453fBd005cBa2c40dBfF8d0B4661c4c47d",
       url: `https://gateway.tenderly.co/public/polygon`,
       accounts: [],
       verify: {
