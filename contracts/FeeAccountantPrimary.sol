@@ -48,6 +48,7 @@ contract FeeAccountantPrimary is
         uint256 convertedFee,
         int256 newBalance
     );
+    event Stage2ScaleUpdated(uint256 numerator, uint256 denominator);
 
     error UnsupportedChain(uint chainId);
     error InvalidNonce(
@@ -114,10 +115,18 @@ contract FeeAccountantPrimary is
         uint256 feeNumerator,
         uint256 feeDenominator
     ) external onlyOwner {
-        require(feeDenominator > 0, "Invalid fee denominator");
         stage2FixedFee = fixedFee;
+        _updateStage2Scale(feeNumerator, feeDenominator);
+    }
+
+    function _updateStage2Scale(
+        uint256 feeNumerator,
+        uint256 feeDenominator
+    ) private {
+        require(feeDenominator > 0, "Invalid fee denominator");
         stage2ScaleNumerator = feeNumerator;
         stage2ScaleDenominator = feeDenominator;
+        emit Stage2ScaleUpdated(feeNumerator, feeDenominator);
     }
 
     function getStage2Fee()
@@ -212,9 +221,18 @@ contract FeeAccountantPrimary is
         }
     }
 
+    function updateStage2ScaleAndCommitFees(
+        FeeRecord[] calldata records,
+        uint256 feeNumerator,
+        uint256 feeDenominator
+    ) public onlyRole(ROLE_OPERATOR) {
+        _updateStage2Scale(feeNumerator, feeDenominator);
+        commitFees(records);
+    }
+
     function commitFees(
         FeeRecord[] calldata records
-    ) external onlyRole(ROLE_OPERATOR) nonReentrant {
+    ) public onlyRole(ROLE_OPERATOR) nonReentrant {
         for (uint i = 0; i < records.length; i++) {
             FeeRecord calldata record = records[i];
             bytes32 nonceKey = getNonceKey(record.wallet, record.chainId);

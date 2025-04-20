@@ -22,19 +22,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const [fixedFee, feeNumerator, feeDenominator] = await proxyInstance.getStage2Fee();
 
-  if (
-    fixedFee !== hre.network.config.stage2Fee.fixedFee ||
-    feeNumerator !== hre.network.config.stage2Fee.feeNumerator ||
-    feeDenominator !== hre.network.config.stage2Fee.feeDenominator
-  ) {
+  const isInitialized = feeDenominator !== 0n;
+  if (fixedFee !== hre.network.config.stage2Fee.fixedFee || !isInitialized) {
     deployments.log(
       `Setting stage2Fee to ${hre.network.config.stage2Fee.fixedFee}/${hre.network.config.stage2Fee.feeNumerator}/${hre.network.config.stage2Fee.feeDenominator}`
     );
     await proxyInstance
       .setStage2Fee(
         hre.network.config.stage2Fee.fixedFee,
-        hre.network.config.stage2Fee.feeNumerator,
-        hre.network.config.stage2Fee.feeDenominator,
+        isInitialized ? feeNumerator : hre.network.config.stage2Fee.feeNumerator,
+        isInitialized ? feeDenominator : hre.network.config.stage2Fee.feeDenominator,
         await getGasConfiguration(hre.ethers.provider)
       )
       .then((x) => x.wait());

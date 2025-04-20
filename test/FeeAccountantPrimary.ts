@@ -101,7 +101,9 @@ describe("FeeAccountantPrimary", function () {
     });
     it("Should record fee after applying stage2 rate", async function () {
       const { owner, walletUser, operator, gasTank, feeAccountantPrimary } = await loadFixture(deployFixture);
-      await feeAccountantPrimary.setStage2Fee(123n, 3n, 2n);
+      await expect(feeAccountantPrimary.setStage2Fee(123n, 3n, 2n))
+        .to.emit(feeAccountantPrimary, "Stage2ScaleUpdated")
+        .withArgs(3n, 2n);
       let { nonce, balance } = await feeAccountantPrimary.getWalletRecord(walletUser.getAddress(), 1);
       expect(balance).to.equal(0n);
       expect(nonce).to.equal(0n);
@@ -127,6 +129,44 @@ describe("FeeAccountantPrimary", function () {
           SAMPLE_FEE_AFTER_STAGE2,
           SAMPLE_FEE_AFTER_STAGE2
         );
+      ({ nonce, balance } = await feeAccountantPrimary.getWalletRecord(walletUser.getAddress(), 1));
+      expect(balance).to.equal(SAMPLE_FEE_AFTER_STAGE2);
+      expect(nonce).to.equal(1n);
+    });
+    it("Should record fee after applying stage2 rate in a single call", async function () {
+      const { owner, walletUser, operator, gasTank, feeAccountantPrimary } = await loadFixture(deployFixture);
+      await feeAccountantPrimary.setStage2Fee(123n, 99n, 55n);
+      let { nonce, balance } = await feeAccountantPrimary.getWalletRecord(walletUser.getAddress(), 1);
+      expect(balance).to.equal(0n);
+      expect(nonce).to.equal(0n);
+      const SAMPLE_FEE_AFTER_STAGE2 = ((SAMPLE_FEE + 123n) * 3n) / 2n;
+      await expect(
+        feeAccountantPrimary.connect(operator).updateStage2ScaleAndCommitFees(
+          [
+            {
+              chainId: 1n,
+              wallet: walletUser.getAddress(),
+              transaction: SAMPLE_TX,
+              nonce: 0,
+              fee: SAMPLE_FEE,
+            },
+          ],
+          3n,
+          2n
+        )
+      )
+        .to.emit(feeAccountantPrimary, "BalanceUpdated")
+        .withArgs(
+          1n,
+          SAMPLE_TX,
+          walletUser.getAddress(),
+          SAMPLE_FEE,
+          0n,
+          SAMPLE_FEE_AFTER_STAGE2,
+          SAMPLE_FEE_AFTER_STAGE2
+        )
+        .and.to.emit(feeAccountantPrimary, "Stage2ScaleUpdated")
+        .withArgs(3n, 2n);
       ({ nonce, balance } = await feeAccountantPrimary.getWalletRecord(walletUser.getAddress(), 1));
       expect(balance).to.equal(SAMPLE_FEE_AFTER_STAGE2);
       expect(nonce).to.equal(1n);
