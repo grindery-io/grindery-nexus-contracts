@@ -9,16 +9,17 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "./OnlyProxy.sol";
 struct FeeReport {
     address user;
     address agent;
     uint256 amount;
 }
 contract AIGasTank is
-    Initializable,
+    ReentrancyGuard,
+    OnlyProxy,
     OwnableUpgradeable,
-    AccessControlUpgradeable,
-    ReentrancyGuarde
+    AccessControlUpgradeable
 {
     using SafeERC20 for IERC20;
 
@@ -26,18 +27,29 @@ contract AIGasTank is
 
     event Deposit(address indexed user, uint256 amount);
     event Withdrawal(address indexed user, uint256 amount);
-    event FeeCharged(address[] users, uint256[] amounts);
+    event FeeCharged(
+        address indexed user,
+        address indexed agent,
+        uint256 amount
+    );
 
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     IERC20 public immutable gasToken;
 
     mapping(address => uint256) public balances; // User balances (pre-deposit)
 
-    constructor(address _gasToken, address _gasTank) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor(
+        address deploymentAddress,
+        address _gasToken,
+        address _gasTank
+    ) OnlyProxy(deploymentAddress) {
         require(_gasToken != address(0), "Invalid gas token address");
         gasToken = IERC20(_gasToken);
     }
 
     function initialize() external initializer {
+        __Context_init();
         __Ownable_init(msg.sender);
         __AccessControl_init();
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
