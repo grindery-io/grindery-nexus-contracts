@@ -1,31 +1,57 @@
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
-import { ethers, upgrades } from "hardhat";
+import { deployments, ethers } from "hardhat";
+import { AIGasTank, AIGasTank__factory, TestERC20, TestERC20__factory } from "../typechain-types";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("AIGasTank", () => {
-  let gasTank: Contract;
+  let gasTank: AIGasTank;
+  let testErc20: TestERC20;
   let deployer: Signer;
   let operator: Signer;
   let agent1: Signer;
   let agent2: Signer;
-  let other: Signer;
+  let user: Signer;
   let deployerAddr: string;
   let operatorAddr: string;
   let agent1Addr: string;
   let agent2Addr: string;
+  let userAddr: string;
+
+  async function deployFixture() {
+    const [owner, operator] = await ethers.getSigners();
+    await deployments.fixture();
+
+    const TestERC20 = await deployments.get("TestGX");
+    const testErc20 = TestERC20__factory.connect(TestERC20.address, owner);
+    await testErc20
+      .connect(operator)
+      .approve(operator.address, ethers.parseEther("5000"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(operator)
+      .transferFrom(operator.address, owner.address, ethers.parseEther("5000"))
+      .then((x) => x.wait());
+    const GasTank = await deployments.get("AIGasTank");
+    const gasTank = AIGasTank__factory.connect(GasTank.address, owner);
+
+    return {
+      testErc20,
+      gasTank,
+    };
+  }
 
   beforeEach(async () => {
-    [deployer, operator, agent1, agent2, other] = await ethers.getSigners();
+    [deployer, operator, agent1, agent2, user] = await ethers.getSigners();
     deployerAddr = await deployer.getAddress();
     operatorAddr = await operator.getAddress();
     agent1Addr = await agent1.getAddress();
     agent2Addr = await agent2.getAddress();
+    userAddr = await user.getAddress();
 
-    const AIGasTank = await ethers.getContractFactory("AIGasTank");
-    gasTank = await upgrades.deployProxy(AIGasTank, [], {
-      initializer: "initialize",
-    });
-    await gasTank.deployed();
+    const fixture = await loadFixture(deployFixture);
+    gasTank = fixture.gasTank;
+    testErc20 = fixture.testErc20;
   });
 
   it("should set deployer as admin", async () => {
@@ -34,58 +60,239 @@ describe("AIGasTank", () => {
   });
 
   it("should allow admin to grant operator role", async () => {
-    const OPERATOR_ROLE = await gasTank.OPERATOR_ROLE();
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
     expect(await gasTank.hasRole(OPERATOR_ROLE, operatorAddr)).to.be.true;
   });
 
-  it("should allow only operator to report fees", async () => {
-    const OPERATOR_ROLE = await gasTank.OPERATOR_ROLE();
+  it("should allow operator to report fees", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
 
     const structs = [
-      { agent: agent1Addr, amount: ethers.utils.parseEther("1.0") },
-      { agent: agent2Addr, amount: ethers.utils.parseEther("2.5") },
+      { agent: agent1Addr, amount: ethers.parseEther("1.0"), user: userAddr },
+      { agent: agent2Addr, amount: ethers.parseEther("2.5"), user: userAddr },
     ];
 
-    await expect(
-      gasTank.connect(operator).reportFees(structs)
-    ).to.emit(gasTank, "FeeReported").withArgs(agent1Addr, ethers.utils.parseEther("1.0"));
-
-    expect(await gasTank.agentBalances(agent1Addr)).to.equal(ethers.utils.parseEther("1.0"));
-    expect(await gasTank.agentBalances(agent2Addr)).to.equal(ethers.utils.parseEther("2.5"));
+    await expect(gasTank.connect(operator).reportFees(structs)).to.not.reverted;
   });
 
   it("should revert if non-operator tries to report fees", async () => {
-    const structs = [
-      { agent: agent1Addr, amount: ethers.utils.parseEther("1.0") },
-    ];
-    await expect(gasTank.connect(other).reportFees(structs)).to.be.revertedWith(
-      `AccessControl: account ${await other.getAddress().toLowerCase()} is missing role ${await gasTank.OPERATOR_ROLE()}`
+    const structs = [{ agent: agent1Addr, amount: ethers.parseEther("1.0"), user: userAddr }];
+    await expect(gasTank.connect(user).reportFees(structs)).to.be.revertedWithCustomError(
+      gasTank,
+      "AccessControlUnauthorizedAccount"
     );
   });
 
-  it("should emit events when reporting multiple fees", async () => {
-    const OPERATOR_ROLE = await gasTank.OPERATOR_ROLE();
+  it("should allow user to deposit", async () => {
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("50"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await expect(gasTank.connect(user).deposit(ethers.parseEther("10"), userAddr))
+      .to.emit(gasTank, "Deposit")
+      .withArgs(userAddr, ethers.parseEther("10"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("10"));
+    expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("40"));
+  });
+
+  it("should allow user to withdraw", async () => {
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await gasTank.connect(user).deposit(ethers.parseEther("10"), userAddr);
+    await expect(gasTank.connect(user).withdraw(ethers.parseEther("5"), userAddr))
+      .to.emit(gasTank, "Withdrawal")
+      .withArgs(userAddr, ethers.parseEther("5"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("5"));
+    expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("5"));
+  });
+
+  it("should allow operator to call deposit on behalf of user", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("50"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await expect(gasTank.connect(operator).deposit(ethers.parseEther("10"), userAddr))
+      .to.emit(gasTank, "Deposit")
+      .withArgs(userAddr, ethers.parseEther("10"));
+    expect(await gasTank.balanceOf(operator)).to.equal(ethers.parseEther("0"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("10"));
+    expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("40"));
+  });
+
+  it("should allow operator to call withdraw on behalf of user", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await gasTank.connect(user).deposit(ethers.parseEther("10"), userAddr);
+    await expect(gasTank.connect(operator).withdraw(ethers.parseEther("5"), userAddr))
+      .to.emit(gasTank, "Withdrawal")
+      .withArgs(userAddr, ethers.parseEther("5"));
+    expect(await gasTank.balanceOf(operator)).to.equal(ethers.parseEther("0"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("5"));
+    expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("5"));
+  });
+
+  it("should reject normal user from calling deposit on behalf of other user", async () => {
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await expect(gasTank.connect(agent1).deposit(ethers.parseEther("10"), userAddr)).to.be.revertedWithCustomError(
+      gasTank,
+      "AccessControlUnauthorizedAccount"
+    );
+  });
+
+  it("should reject normal user from calling withdraw on behalf of other user", async () => {
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await gasTank.connect(user).deposit(ethers.parseEther("10"), userAddr);
+    await expect(gasTank.connect(agent1).withdraw(ethers.parseEther("5"), userAddr)).to.be.revertedWithCustomError(
+      gasTank,
+      "AccessControlUnauthorizedAccount"
+    );
+  });
+
+  it("should emit event when reporting fee", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
 
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await gasTank.connect(user).deposit(ethers.parseEther("10"), userAddr);
+
+    const structs = [{ agent: agent1Addr, amount: ethers.parseEther("1"), user: userAddr }];
+    await expect(gasTank.connect(operator).reportFees(structs))
+      .to.emit(gasTank, "FeeCharged")
+      .withArgs(userAddr, agent1Addr, 0, ethers.parseEther("1"));
+
+    expect(await gasTank.balanceOf(agent1)).to.equal(ethers.parseEther("1"));
+  });
+
+  it("should emit events when reporting multiple fees", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await gasTank.connect(user).deposit(ethers.parseEther("10"), userAddr);
+
     const structs = [
-      { agent: agent1Addr, amount: ethers.utils.parseEther("1") },
-      { agent: agent2Addr, amount: ethers.utils.parseEther("2") },
+      { agent: agent1Addr, amount: ethers.parseEther("1"), user: userAddr },
+      { agent: agent2Addr, amount: ethers.parseEther("2"), user: userAddr },
     ];
+    await expect(gasTank.connect(operator).reportFees(structs))
+      .to.emit(gasTank, "FeeCharged")
+      .withArgs(userAddr, agent1Addr, 0, ethers.parseEther("1"))
+      .to.emit(gasTank, "FeeCharged")
+      .withArgs(userAddr, agent2Addr, 1, ethers.parseEther("2"));
 
-    const tx = await gasTank.connect(operator).reportFees(structs);
-    const receipt = await tx.wait();
+    expect(await gasTank.balanceOf(agent1)).to.equal(ethers.parseEther("1"));
+    expect(await gasTank.balanceOf(agent2)).to.equal(ethers.parseEther("2"));
+  });
 
-    const feeEvents = receipt.events?.filter((e) => e.event === "FeeReported");
-    expect(feeEvents?.length).to.equal(2);
-    expect(feeEvents?.[0].args?.agent).to.equal(agent1Addr);
-    expect(feeEvents?.[1].args?.agent).to.equal(agent2Addr);
+  it("should emit failure event when balance is not enough", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("1"))
+      .then((x) => x.wait());
+    await gasTank.connect(user).deposit(ethers.parseEther("1"), userAddr);
+
+    const structs = [{ agent: agent1Addr, amount: ethers.parseEther("2"), user: userAddr }];
+    await expect(gasTank.connect(operator).reportFees(structs))
+      .to.emit(gasTank, "FeeChargeFailed")
+      .withArgs(userAddr, agent1Addr, 0, ethers.parseEther("2"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("1"));
+    expect(await gasTank.balanceOf(agent1)).to.equal(ethers.parseEther("0"));
+  });
+
+  it("should emit correct events when some charges fail", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("1.5"))
+      .then((x) => x.wait());
+    await gasTank.connect(user).deposit(ethers.parseEther("1.5"), userAddr);
+
+    const structs = [
+      { agent: agent1Addr, amount: ethers.parseEther("1"), user: userAddr },
+      { agent: agent2Addr, amount: ethers.parseEther("2"), user: userAddr },
+    ];
+    await expect(gasTank.connect(operator).reportFees(structs))
+      .to.emit(gasTank, "FeeCharged")
+      .withArgs(userAddr, agent1Addr, 0, ethers.parseEther("1"))
+      .to.emit(gasTank, "FeeChargeFailed")
+      .withArgs(userAddr, agent2Addr, 1, ethers.parseEther("2"));
+
+    expect(await gasTank.balanceOf(agent1)).to.equal(ethers.parseEther("1"));
+    expect(await gasTank.balanceOf(agent2)).to.equal(ethers.parseEther("0"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("0.5"));
   });
 
   it("should allow admin to revoke operator role", async () => {
-    const OPERATOR_ROLE = await gasTank.OPERATOR_ROLE();
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+    expect(await gasTank.hasRole(OPERATOR_ROLE, operatorAddr)).to.be.true;
     await gasTank.revokeRole(OPERATOR_ROLE, operatorAddr);
     expect(await gasTank.hasRole(OPERATOR_ROLE, operatorAddr)).to.be.false;
   });

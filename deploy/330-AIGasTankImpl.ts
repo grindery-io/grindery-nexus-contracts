@@ -1,27 +1,28 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { getGasConfiguration } from "../lib/gas";
 
-const DEPLOYMENT_NAME = "TestGX";
+const DEPLOYMENT_NAME = "AIGasTankImpl";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  if (!["polygon", "amoy", "hardhat"].includes(hre.network.name)) {
-    return true;
-  }
   const { getNamedAccounts, deployments, ethers } = hre;
   const { deploy } = deployments;
+  if (!(await deployments.getOrNull(DEPLOYMENT_NAME.replace(/Impl$/, "")))) {
+    return true;
+  }
   const { owner } = await getNamedAccounts();
 
   await deploy(DEPLOYMENT_NAME, {
-    contract: DEPLOYMENT_NAME,
+    contract: "AIGasTank",
     from: owner,
-    args: [],
+    args: [hre.network.config.gxTokenAddress],
     log: true,
     estimateGasExtra: 10000,
     deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME))),
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
+  // verifyContractAddress(await hre.network.provider.getChainId(), "HUB", result.address);
   return true;
 };
 func.id = DEPLOYMENT_NAME;

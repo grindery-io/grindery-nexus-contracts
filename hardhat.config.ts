@@ -65,6 +65,7 @@ const config: HardhatUserConfig = {
       accounts: TEST_ACCOUNTS,
       gasTokenAddress: "0x0000000000000000000000000000000000000000",
       gasTankSigner: "0x1111111111111111111111111111111111111111",
+      gxTokenAddress: "0xC3493D5787d4fF987d56855C64aAd60F382B5959",
     },
     goerli: {
       url: `https://rpc.ankr.com/eth_goerli`,
@@ -91,7 +92,7 @@ const config: HardhatUserConfig = {
       },
     },
     amoy: {
-      url: `https://polygon-amoy.drpc.org`,
+      url: `https://polygon-amoy-bor-rpc.publicnode.com`,
       gasTokenAddress: "0xC3493D5787d4fF987d56855C64aAd60F382B5959",
       gasTankSigner: GAS_TANK_SIGNER_TESTNET,
       feeAccountantOperator: FEE_ACCOUNTANT_OPERATOR_TESTNET,
@@ -138,8 +139,8 @@ const config: HardhatUserConfig = {
       },
       stage2Fee: {
         fixedFee: ethers.parseEther("0.015"),
-        feeNumerator: 1000n,
-        feeDenominator: 49n,
+        feeNumerator: 1000000n,
+        feeDenominator: 5239n,
       },
       baseGas: 230000n,
 
