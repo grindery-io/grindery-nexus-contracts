@@ -74,12 +74,13 @@ describe("AIGasTank", () => {
       { agent: agent2Addr, amount: ethers.parseEther("2.5"), user: userAddr },
     ];
 
-    await expect(gasTank.connect(operator).reportFees(structs)).to.not.reverted;
+    const batchId = ethers.randomBytes(32);
+    await expect(gasTank.connect(operator).reportFees(batchId, structs)).to.be.not.reverted;
   });
 
   it("should revert if non-operator tries to report fees", async () => {
     const structs = [{ agent: agent1Addr, amount: ethers.parseEther("1.0"), user: userAddr }];
-    await expect(gasTank.connect(user).reportFees(structs)).to.be.revertedWithCustomError(
+    await expect(gasTank.connect(user).reportFees(ethers.randomBytes(32), structs)).to.be.revertedWithCustomError(
       gasTank,
       "AccessControlUnauthorizedAccount"
     );
@@ -202,10 +203,11 @@ describe("AIGasTank", () => {
       .then((x) => x.wait());
     await gasTank.connect(user).deposit(ethers.parseEther("10"), userAddr);
 
+    const batchId = ethers.randomBytes(32);
     const structs = [{ agent: agent1Addr, amount: ethers.parseEther("1"), user: userAddr }];
-    await expect(gasTank.connect(operator).reportFees(structs))
+    await expect(gasTank.connect(operator).reportFees(batchId, structs))
       .to.emit(gasTank, "FeeCharged")
-      .withArgs(userAddr, agent1Addr, 0, ethers.parseEther("1"));
+      .withArgs(batchId, userAddr, agent1Addr, 0, ethers.parseEther("1"));
 
     expect(await gasTank.balanceOf(agent1)).to.equal(ethers.parseEther("1"));
   });
@@ -228,11 +230,12 @@ describe("AIGasTank", () => {
       { agent: agent1Addr, amount: ethers.parseEther("1"), user: userAddr },
       { agent: agent2Addr, amount: ethers.parseEther("2"), user: userAddr },
     ];
-    await expect(gasTank.connect(operator).reportFees(structs))
+    const batchId = ethers.randomBytes(32);
+    await expect(gasTank.connect(operator).reportFees(batchId, structs))
       .to.emit(gasTank, "FeeCharged")
-      .withArgs(userAddr, agent1Addr, 0, ethers.parseEther("1"))
+      .withArgs(batchId, userAddr, agent1Addr, 0, ethers.parseEther("1"))
       .to.emit(gasTank, "FeeCharged")
-      .withArgs(userAddr, agent2Addr, 1, ethers.parseEther("2"));
+      .withArgs(batchId, userAddr, agent2Addr, 1, ethers.parseEther("2"));
 
     expect(await gasTank.balanceOf(agent1)).to.equal(ethers.parseEther("1"));
     expect(await gasTank.balanceOf(agent2)).to.equal(ethers.parseEther("2"));
@@ -253,9 +256,10 @@ describe("AIGasTank", () => {
     await gasTank.connect(user).deposit(ethers.parseEther("1"), userAddr);
 
     const structs = [{ agent: agent1Addr, amount: ethers.parseEther("2"), user: userAddr }];
-    await expect(gasTank.connect(operator).reportFees(structs))
+    const batchId = ethers.randomBytes(32);
+    await expect(gasTank.connect(operator).reportFees(batchId, structs))
       .to.emit(gasTank, "FeeChargeFailed")
-      .withArgs(userAddr, agent1Addr, 0, ethers.parseEther("2"));
+      .withArgs(batchId, userAddr, agent1Addr, 0, ethers.parseEther("2"));
     expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("1"));
     expect(await gasTank.balanceOf(agent1)).to.equal(ethers.parseEther("0"));
   });
@@ -278,11 +282,12 @@ describe("AIGasTank", () => {
       { agent: agent1Addr, amount: ethers.parseEther("1"), user: userAddr },
       { agent: agent2Addr, amount: ethers.parseEther("2"), user: userAddr },
     ];
-    await expect(gasTank.connect(operator).reportFees(structs))
+    const batchId = ethers.randomBytes(32);
+    await expect(gasTank.connect(operator).reportFees(batchId, structs))
       .to.emit(gasTank, "FeeCharged")
-      .withArgs(userAddr, agent1Addr, 0, ethers.parseEther("1"))
+      .withArgs(batchId, userAddr, agent1Addr, 0, ethers.parseEther("1"))
       .to.emit(gasTank, "FeeChargeFailed")
-      .withArgs(userAddr, agent2Addr, 1, ethers.parseEther("2"));
+      .withArgs(batchId, userAddr, agent2Addr, 1, ethers.parseEther("2"));
 
     expect(await gasTank.balanceOf(agent1)).to.equal(ethers.parseEther("1"));
     expect(await gasTank.balanceOf(agent2)).to.equal(ethers.parseEther("0"));

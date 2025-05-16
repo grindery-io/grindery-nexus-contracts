@@ -28,12 +28,14 @@ contract AIGasTank is
     event Deposit(address indexed user, uint256 amount);
     event Withdrawal(address indexed user, uint256 amount);
     event FeeCharged(
+        bytes32 indexed batchId,
         address indexed user,
         address indexed agent,
         uint256 index,
         uint256 amount
     );
     event FeeChargeFailed(
+        bytes32 indexed batchId,
         address indexed user,
         address indexed agent,
         uint256 index,
@@ -81,18 +83,19 @@ contract AIGasTank is
     }
 
     function reportFees(
+        bytes32 batchId,
         FeeReport[] calldata reports
     ) external onlyRole(ROLE_OPERATOR) nonReentrant {
         for (uint256 i = 0; i < reports.length; i++) {
             FeeReport calldata r = reports[i];
             uint256 amount = r.amount;
             if (balances[r.user] < amount) {
-                emit FeeChargeFailed(r.user, r.agent, i, r.amount);
+                emit FeeChargeFailed(batchId, r.user, r.agent, i, r.amount);
                 continue;
             }
             balances[r.user] -= amount;
             balances[r.agent] += amount;
-            emit FeeCharged(r.user, r.agent, i, r.amount);
+            emit FeeCharged(batchId, r.user, r.agent, i, r.amount);
         }
     }
 
