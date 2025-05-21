@@ -138,6 +138,25 @@ describe("AIGasTank", () => {
     expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("40"));
   });
 
+  it("should allow operator to deposit from treasury to user balance", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operator);
+    await testErc20
+      .connect(deployer)
+      .transfer(operatorAddr, ethers.parseEther("50"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(operator)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await expect(gasTank.connect(operator).depositInternal(ethers.parseEther("10"), userAddr))
+      .to.emit(gasTank, "Deposit")
+      .withArgs(userAddr, ethers.parseEther("10"));
+    expect(await gasTank.balanceOf(operator)).to.equal(ethers.parseEther("0"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("10"));
+    expect(await testErc20.balanceOf(operatorAddr)).to.equal(ethers.parseEther("40"));
+  });
+
   it("should allow operator to call withdraw on behalf of user", async () => {
     const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
@@ -168,6 +187,21 @@ describe("AIGasTank", () => {
       .approve(gasTank.getAddress(), ethers.parseEther("10"))
       .then((x) => x.wait());
     await expect(gasTank.connect(agent1).deposit(ethers.parseEther("10"), userAddr)).to.be.revertedWithCustomError(
+      gasTank,
+      "AccessControlUnauthorizedAccount"
+    );
+  });
+
+  it("should reject normal user from calling internal deposit", async () => {
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await expect(gasTank.connect(agent1).depositInternal(ethers.parseEther("10"), userAddr)).to.be.revertedWithCustomError(
       gasTank,
       "AccessControlUnauthorizedAccount"
     );

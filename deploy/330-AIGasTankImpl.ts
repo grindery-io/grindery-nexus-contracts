@@ -22,8 +22,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
-  // verifyContractAddress(await hre.network.provider.getChainId(), "HUB", result.address);
-  return true;
 };
 func.id = DEPLOYMENT_NAME;
 func.tags = [DEPLOYMENT_NAME];

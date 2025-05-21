@@ -71,6 +71,13 @@ contract AIGasTank is
         emit Deposit(user, amount);
     }
 
+    function depositInternal(uint256 amount, address user) external nonReentrant onlyRole(ROLE_OPERATOR) {
+        require(amount > 0, "Deposit amount must be greater than zero");
+        gasToken.safeTransferFrom(msg.sender, address(this), amount);
+        balances[user] += amount;
+        emit Deposit(user, amount);
+    }
+
     function withdraw(uint256 amount, address user) external nonReentrant {
         if (user != msg.sender) {
             _checkRole(ROLE_OPERATOR);
