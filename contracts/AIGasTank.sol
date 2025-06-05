@@ -61,12 +61,19 @@ contract AIGasTank is
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    function deposit(uint256 amount, address user) external nonReentrant {
+    function deposit(uint256 amount, address user) public nonReentrant {
         if (user != msg.sender) {
             _checkRole(ROLE_OPERATOR);
         }
         require(amount > 0, "Deposit amount must be greater than zero");
         gasToken.safeTransferFrom(user, address(this), amount);
+        balances[user] += amount;
+        emit Deposit(user, amount);
+    }
+
+    function depositTo(uint256 amount, address user, address tokenSource) public nonReentrant onlyRole(ROLE_OPERATOR) {
+        require(amount > 0, "Deposit amount must be greater than zero");
+        gasToken.safeTransferFrom(tokenSource, address(this), amount);
         balances[user] += amount;
         emit Deposit(user, amount);
     }

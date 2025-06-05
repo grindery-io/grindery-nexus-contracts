@@ -102,6 +102,24 @@ describe("AIGasTank", () => {
     expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("40"));
   });
 
+  it("should allow user to deposit to another wallet", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+    await testErc20
+      .connect(deployer)
+      .transfer(agent1, ethers.parseEther("50"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(agent1)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await expect(gasTank.connect(operator).depositTo(ethers.parseEther("10"), userAddr, agent1Addr))
+      .to.emit(gasTank, "Deposit")
+      .withArgs(userAddr, ethers.parseEther("10"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("10"));
+    expect(await testErc20.balanceOf(agent1Addr)).to.equal(ethers.parseEther("40"));
+  });
+
   it("should allow user to withdraw", async () => {
     await testErc20
       .connect(deployer)
