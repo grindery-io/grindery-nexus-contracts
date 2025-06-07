@@ -102,7 +102,7 @@ describe("AIGasTank", () => {
     expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("40"));
   });
 
-  it("should allow user to deposit to another wallet", async () => {
+  it("should allow user to deposit from another wallet", async () => {
     const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
     await testErc20
@@ -135,6 +135,24 @@ describe("AIGasTank", () => {
       .withArgs(userAddr, ethers.parseEther("5"));
     expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("5"));
     expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("5"));
+  });
+  it("should allow user to withdraw to another wallet", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+    await testErc20
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await gasTank.connect(user).deposit(ethers.parseEther("10"), userAddr);
+    await expect(gasTank.connect(operator).withdrawTo(ethers.parseEther("5"), userAddr, agent1Addr))
+      .to.emit(gasTank, "Withdrawal")
+      .withArgs(userAddr, ethers.parseEther("5"));
+    expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("5"));
+    expect(await testErc20.balanceOf(agent1Addr)).to.equal(ethers.parseEther("5"));
   });
 
   it("should allow operator to call deposit on behalf of user", async () => {
@@ -219,10 +237,9 @@ describe("AIGasTank", () => {
       .connect(user)
       .approve(gasTank.getAddress(), ethers.parseEther("10"))
       .then((x) => x.wait());
-    await expect(gasTank.connect(agent1).depositInternal(ethers.parseEther("10"), userAddr)).to.be.revertedWithCustomError(
-      gasTank,
-      "AccessControlUnauthorizedAccount"
-    );
+    await expect(
+      gasTank.connect(agent1).depositInternal(ethers.parseEther("10"), userAddr)
+    ).to.be.revertedWithCustomError(gasTank, "AccessControlUnauthorizedAccount");
   });
 
   it("should reject normal user from calling withdraw on behalf of other user", async () => {

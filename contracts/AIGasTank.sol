@@ -95,6 +95,13 @@ contract AIGasTank is
         gasToken.safeTransfer(user, amount);
         emit Withdrawal(user, amount);
     }
+    function withdrawTo(uint256 amount, address user, address tokenDestination) external nonReentrant onlyRole(ROLE_OPERATOR) {
+        require(amount > 0, "Withdraw amount must be greater than zero");
+        require(balances[user] >= amount, "Insufficient balance");
+        balances[user] -= amount;
+        gasToken.safeTransfer(tokenDestination, amount);
+        emit Withdrawal(user, amount);
+    }
 
     function reportFees(
         bytes32 batchId,
