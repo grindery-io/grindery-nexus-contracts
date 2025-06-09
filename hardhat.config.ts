@@ -128,6 +128,8 @@ const config: HardhatUserConfig = {
     base: {
       live: true,
       url: `https://base-rpc.publicnode.com`,
+      gasTankSigner: GAS_TANK_SIGNER,
+      txSigner: TX_SIGNER,
       genesisOwner: "0xb64A61AF640514B0dC656AB1710a5D5e733D0d29",
       accounts: [],
     },
