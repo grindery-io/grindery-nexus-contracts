@@ -15,7 +15,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await deploy(DEPLOYMENT_NAME, {
     contract: "AIGasTank",
     from: owner,
-    args: [hre.network.config.gxTokenAddress],
+    args: [hre.network.config.aiGasTankToken],
     log: true,
     estimateGasExtra: 10000,
     deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME))),

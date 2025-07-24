@@ -42,6 +42,7 @@ interface NetworkConfigExtra {
   gxTokenAddress?: string;
   gxTonBridgeOperator?: string;
   aiGasTankOperator?: string;
+  aiGasTankToken?: string;
   genesisOwner?: string;
 }
 
@@ -157,6 +158,7 @@ const config: HardhatUserConfig = {
       gxTokenAddress: "0x8730762Cad4a27816A467fAc54e3dd1E2e9617A1",
       gxTonBridgeOperator: "0x318f6E453fBd005cBa2c40dBfF8d0B4661c4c47d",
       aiGasTankOperator: "0x280a6A1D7fB1113AaB9C5Af5E6586a32D3A5F2C8",
+      aiGasTankToken: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // USDC
       genesisOwner: "0xb64A61AF640514B0dC656AB1710a5D5e733D0d29",
       url: `https://gateway.tenderly.co/public/polygon`,
       accounts: [],

@@ -25,7 +25,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [hre.config.deterministicDeployment(hre.network.name)?.factory, owner],
     log: true,
     estimateGasExtra: 10000,
-    deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME))),
+    deterministicDeployment: ethers.keccak256(ethers.getBytes(ethers.toUtf8Bytes(DEPLOYMENT_NAME + "USDC"))),
     waitConfirmations: 1,
     ...(await getGasConfiguration(hre.ethers.provider)),
   });
