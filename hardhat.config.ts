@@ -165,8 +165,7 @@ const config: HardhatUserConfig = {
       accounts: [],
       verify: {
         etherscan: {
-          apiUrl: "https://api.polygonscan.com",
-          apiKey: POLYGONSCAN_API_KEY,
+          apiKey: ETHERSCAN_API_KEY,
         },
       },
     },
