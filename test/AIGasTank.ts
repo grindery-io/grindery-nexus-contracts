@@ -7,6 +7,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 describe("AIGasTank", () => {
   let gasTank: AIGasTank;
   let testErc20: TestERC20;
+  let testExternalToken: TestERC20;
   let deployer: Signer;
   let operator: Signer;
   let agent1: Signer;
@@ -22,8 +23,9 @@ describe("AIGasTank", () => {
     const [owner, operator] = await ethers.getSigners();
     await deployments.fixture();
 
-    const TestERC20 = await deployments.get("TestGX");
-    const testErc20 = TestERC20__factory.connect(TestERC20.address, owner);
+    const TestERC20Deployment = await deployments.get("TestGX");
+    const testErc20 = TestERC20__factory.connect(TestERC20Deployment.address, owner);
+    const testExternalToken = await new TestERC20__factory(owner).deploy(ethers.parseEther("10000"));
     await testErc20
       .connect(operator)
       .approve(operator.address, ethers.parseEther("5000"))
@@ -38,6 +40,7 @@ describe("AIGasTank", () => {
     return {
       testErc20,
       gasTank,
+      testExternalToken,
     };
   }
 
@@ -52,6 +55,7 @@ describe("AIGasTank", () => {
     const fixture = await loadFixture(deployFixture);
     gasTank = fixture.gasTank;
     testErc20 = fixture.testErc20;
+    testExternalToken = fixture.testExternalToken;
   });
 
   it("should set deployer as admin", async () => {
@@ -119,7 +123,7 @@ describe("AIGasTank", () => {
     expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("10"));
     expect(await testErc20.balanceOf(agent1Addr)).to.equal(ethers.parseEther("40"));
   });
-
+  /*
   it("should allow user to withdraw", async () => {
     await testErc20
       .connect(deployer)
@@ -136,6 +140,7 @@ describe("AIGasTank", () => {
     expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("5"));
     expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("5"));
   });
+  */
   it("should allow user to withdraw to another wallet", async () => {
     const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
@@ -174,6 +179,44 @@ describe("AIGasTank", () => {
     expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("40"));
   });
 
+  it("should allow operator to call deposit on behalf of user with external token", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+    await testExternalToken
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("50"))
+      .then((x) => x.wait());
+    await testExternalToken
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(deployer)
+      .approve(gasTank.getAddress(), ethers.MaxUint256)
+      .then((x) => x.wait());
+    const originalBaseTokenBalance = await testErc20.balanceOf(deployerAddr);
+    await expect(
+      gasTank
+        .connect(operator)
+        .depositWithExternalToken(
+          ethers.parseEther("10"),
+          userAddr,
+          testExternalToken.getAddress(),
+          3n,
+          2n,
+          deployerAddr
+        )
+    )
+      .to.emit(gasTank, "Deposit")
+      .withArgs(userAddr, (ethers.parseEther("10") * 3n) / 2n);
+    expect(await gasTank.balanceOf(operator)).to.equal(ethers.parseEther("0"));
+    expect(await gasTank.balanceOf(user)).to.equal((ethers.parseEther("10") * 3n) / 2n);
+    expect(await testErc20.balanceOf(deployer)).to.equal(
+      originalBaseTokenBalance - (ethers.parseEther("10") * 3n) / 2n
+    );
+    expect(await testExternalToken.balanceOf(userAddr)).to.equal(ethers.parseEther("40"));
+  });
+
   it("should allow operator to deposit from treasury to user balance", async () => {
     const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operator);
@@ -192,7 +235,7 @@ describe("AIGasTank", () => {
     expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("10"));
     expect(await testErc20.balanceOf(operatorAddr)).to.equal(ethers.parseEther("40"));
   });
-
+  /*
   it("should allow operator to call withdraw on behalf of user", async () => {
     const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
@@ -212,7 +255,7 @@ describe("AIGasTank", () => {
     expect(await gasTank.balanceOf(user)).to.equal(ethers.parseEther("5"));
     expect(await testErc20.balanceOf(userAddr)).to.equal(ethers.parseEther("5"));
   });
-
+  */
   it("should reject normal user from calling deposit on behalf of other user", async () => {
     await testErc20
       .connect(deployer)
@@ -241,7 +284,7 @@ describe("AIGasTank", () => {
       gasTank.connect(agent1).depositInternal(ethers.parseEther("10"), userAddr)
     ).to.be.revertedWithCustomError(gasTank, "AccessControlUnauthorizedAccount");
   });
-
+  /*
   it("should reject normal user from calling withdraw on behalf of other user", async () => {
     await testErc20
       .connect(deployer)
@@ -257,7 +300,59 @@ describe("AIGasTank", () => {
       "AccessControlUnauthorizedAccount"
     );
   });
-
+  */
+  it("should allow operator to call withdraw on behalf of user with external token", async () => {
+    const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
+    await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);
+    await testExternalToken
+      .connect(deployer)
+      .transfer(user, ethers.parseEther("50"))
+      .then((x) => x.wait());
+    await testExternalToken
+      .connect(user)
+      .approve(gasTank.getAddress(), ethers.parseEther("10"))
+      .then((x) => x.wait());
+    await testErc20
+      .connect(deployer)
+      .approve(gasTank.getAddress(), ethers.MaxUint256)
+      .then((x) => x.wait());
+    const originalBaseTokenBalance = await testErc20.balanceOf(deployerAddr);
+    await expect(
+      gasTank
+        .connect(operator)
+        .depositWithExternalToken(
+          ethers.parseEther("10"),
+          userAddr,
+          testExternalToken.getAddress(),
+          3n,
+          2n,
+          deployerAddr
+        )
+    )
+      .to.emit(gasTank, "Deposit")
+      .withArgs(userAddr, (ethers.parseEther("10") * 3n) / 2n);
+    expect(await gasTank.balanceOf(operator)).to.equal(ethers.parseEther("0"));
+    expect(await gasTank.balanceOf(user)).to.equal((ethers.parseEther("10") * 3n) / 2n);
+    expect(await testErc20.balanceOf(deployer)).to.equal(
+      originalBaseTokenBalance - (ethers.parseEther("10") * 3n) / 2n
+    );
+    expect(await testExternalToken.balanceOf(userAddr)).to.equal(ethers.parseEther("40"));
+    await expect(
+      gasTank
+        .connect(operator)
+        .withdrawWithExternalTokenTo(
+          ethers.parseEther("3"),
+          userAddr,
+          testExternalToken.getAddress(),
+          3n,
+          2n,
+          userAddr
+        )
+    )
+      .to.emit(gasTank, "Withdrawal")
+      .withArgs(userAddr, ethers.parseEther("3"));
+    expect(await testExternalToken.balanceOf(userAddr)).to.equal(ethers.parseEther("42"));
+  });
   it("should emit event when reporting fee", async () => {
     const OPERATOR_ROLE = await gasTank.ROLE_OPERATOR();
     await gasTank.grantRole(OPERATOR_ROLE, operatorAddr);

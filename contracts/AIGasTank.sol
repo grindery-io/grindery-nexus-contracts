@@ -9,6 +9,7 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./OnlyProxy.sol";
 struct FeeReport {
     address user;
@@ -71,20 +72,66 @@ contract AIGasTank is
         emit Deposit(user, amount);
     }
 
-    function depositTo(uint256 amount, address user, address tokenSource) public nonReentrant onlyRole(ROLE_OPERATOR) {
+    function depositTo(
+        uint256 amount,
+        address user,
+        address tokenSource
+    ) public nonReentrant onlyRole(ROLE_OPERATOR) {
         require(amount > 0, "Deposit amount must be greater than zero");
+        require(tokenSource != address(this), "Invalid token source");
         gasToken.safeTransferFrom(tokenSource, address(this), amount);
         balances[user] += amount;
         emit Deposit(user, amount);
     }
 
-    function depositInternal(uint256 amount, address user) external nonReentrant onlyRole(ROLE_OPERATOR) {
+    function depositInternal(
+        uint256 amount,
+        address user
+    ) external nonReentrant onlyRole(ROLE_OPERATOR) {
         require(amount > 0, "Deposit amount must be greater than zero");
         gasToken.safeTransferFrom(msg.sender, address(this), amount);
         balances[user] += amount;
         emit Deposit(user, amount);
     }
 
+    function depositWithExternalToken(
+        uint256 amountOfExternalToken,
+        address user,
+        IERC20 token,
+        uint256 rateNumerator,
+        uint256 rateDenominator,
+        address baseTokenSource
+    ) external nonReentrant onlyRole(ROLE_OPERATOR) {
+        require(address(token) != address(0), "Invalid token address");
+        require(address(token) != address(gasToken), "Cannot use gas token");
+        require(
+            amountOfExternalToken > 0,
+            "Deposit amount must be greater than zero"
+        );
+        require(rateNumerator > 0, "Rate numerator must be greater than zero");
+        require(
+            rateDenominator > 0,
+            "Rate denominator must be greater than zero"
+        );
+        require(baseTokenSource != address(this), "Invalid base token source");
+        uint256 amount = Math.mulDiv(
+            amountOfExternalToken,
+            rateNumerator,
+            rateDenominator
+        );
+        require(amount > 0, "Deposit amount must be greater than zero");
+        SafeERC20.safeTransferFrom(
+            token,
+            user,
+            address(this),
+            amountOfExternalToken
+        );
+        gasToken.safeTransferFrom(baseTokenSource, address(this), amount);
+        balances[user] += amount;
+        emit Deposit(user, amount);
+    }
+
+    /*
     function withdraw(uint256 amount, address user) external nonReentrant {
         if (user != msg.sender) {
             _checkRole(ROLE_OPERATOR);
@@ -95,12 +142,44 @@ contract AIGasTank is
         gasToken.safeTransfer(user, amount);
         emit Withdrawal(user, amount);
     }
-    function withdrawTo(uint256 amount, address user, address tokenDestination) external nonReentrant onlyRole(ROLE_OPERATOR) {
+    */
+
+    function withdrawTo(
+        uint256 amount,
+        address user,
+        address tokenDestination
+    ) external nonReentrant onlyRole(ROLE_OPERATOR) {
         require(amount > 0, "Withdraw amount must be greater than zero");
         require(balances[user] >= amount, "Insufficient balance");
         balances[user] -= amount;
         gasToken.safeTransfer(tokenDestination, amount);
         emit Withdrawal(user, amount);
+    }
+
+    function withdrawWithExternalTokenTo(
+        uint256 amountOfBaseToken,
+        address user,
+        IERC20 token,
+        uint256 rateNumerator,
+        uint256 rateDenominator,
+        address tokenDestination
+    ) external nonReentrant onlyRole(ROLE_OPERATOR) {
+        require(address(token) != address(0), "Invalid token address");
+        require(address(token) != address(gasToken), "Cannot use gas token");
+        require(
+            amountOfBaseToken > 0,
+            "Withdraw amount must be greater than zero"
+        );
+        require(balances[user] >= amountOfBaseToken, "Insufficient balance");
+        // Note: rateNumerator and rateDenominator are reversed here, so that we can use same rate as depositWithExternalToken
+        uint256 amount = Math.mulDiv(
+            amountOfBaseToken,
+            rateDenominator,
+            rateNumerator
+        );
+        balances[user] -= amountOfBaseToken;
+        SafeERC20.safeTransfer(token, tokenDestination, amount);
+        emit Withdrawal(user, amountOfBaseToken);
     }
 
     function reportFees(
