@@ -30,6 +30,7 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
+    "@prb/math": "^4.1.0",
     "accountabstraction": "github:eth-infinitism/account-abstraction",
     "lodash": "^4.17.21",
     "solady": "^0.0.237",
