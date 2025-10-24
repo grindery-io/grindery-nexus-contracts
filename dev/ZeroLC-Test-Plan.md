@@ -99,20 +99,20 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 3.2 Edge Cases & Failures
 
-- [ ] Register scope with insufficient balance and no allowance (should revert)
-- [ ] Register scope with invalid signature (should revert)
-- [ ] Register scope with expired notAfter (should revert)
-- [ ] Register scope with notBefore in future (should revert)
-- [ ] Register scope with zero totalAmount (should revert)
-- [ ] Register scope with zero disputeWindow (should revert)
-- [ ] Register scope with zero agent address (should revert)
-- [ ] Register scope where user == agent (should revert)
-- [ ] Register duplicate scope hash (should revert)
-- [ ] Register scope at exact notBefore timestamp (boundary)
-- [ ] Register scope at notAfter - 1 second (boundary)
-- [ ] Register scope with totalAmount == balance (exact match)
-- [ ] Register scope with totalAmount > balance by 1 wei (should revert without allowance)
-- [ ] Reentrancy attack during registration (should be blocked)
+- [x] Register scope with insufficient balance and no allowance (should revert)
+- [x] Register scope with invalid signature (should revert)
+- [x] Register scope with expired notAfter (should revert)
+- [x] Register scope with notBefore in future (should revert)
+- [x] Register scope with zero totalAmount (should revert)
+- [x] Register scope with zero disputeWindow (should revert)
+- [x] Register scope with zero agent address (should revert)
+- [x] Register scope where user == agent (should revert)
+- [x] Register duplicate scope hash (should revert) - covered in 3.1
+- [x] Register scope at exact notBefore timestamp (boundary)
+- [x] Register scope at notAfter - 1 second (boundary)
+- [x] Register scope with totalAmount == balance (exact match)
+- [x] Register scope with totalAmount > balance by 1 wei (should revert without allowance)
+- [x] Reentrancy attack during registration (should be blocked)
 
 ### 3.3 EIP712 Signature Verification
 
@@ -617,15 +617,16 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 64
+**Completed**: 77
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
 - Section 3.1 - Valid Registration (13 tests including ERC-6492)
+- Section 3.2 - Edge Cases & Failures (13 tests)
 - Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 136+
+**Not Started**: 123+
 
 ### Recent Updates
 - ✅ Implemented nonce-based replay protection for deposit signatures
@@ -640,12 +641,18 @@ test/
 - ✅ Added 6-decimal token support tests (`TestERC20_6Decimals`) to verify USDC/USDT-like token compatibility
 - ✅ Tested basic deposit, multiple deposits, and fractional amounts with 6-decimal tokens
 - ✅ Completed Section 3.1 - Authorization Scope Valid Registration (13 tests)
+- ✅ Completed Section 3.2 - Authorization Scope Edge Cases & Failures (13 tests)
 - ✅ Created [test/ZeroLC/ZeroLC.authorization.test.ts](test/ZeroLC/ZeroLC.authorization.test.ts)
 - ✅ Tested EOA, ERC-1271, and ERC-6492 signatures for authorization scope registration
 - ✅ Verified auto-deposit functionality when balance insufficient
 - ✅ Tested duplicate scope registration prevention
 - ✅ Verified user/agent state updates and event emissions
 - ✅ Created SimpleCreate2Factory for testing CREATE2 deployments
+- ✅ Comprehensive edge case testing: insufficient balance, invalid signatures, expired scopes, time boundaries
+- ✅ Tested self-dealing prevention (user == agent)
+- ✅ Tested validation for zero values (totalAmount, disputeWindow, agent address)
+- ✅ Boundary condition tests for notBefore/notAfter timestamps
+- ✅ Verified reentrancy protection on registration
 
 ---
 
