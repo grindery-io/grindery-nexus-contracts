@@ -83,18 +83,19 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 3.1 Valid Registration
 
-- [ ] Register scope with valid signature and sufficient balance
-- [ ] Register scope with EOA signature
-- [ ] Register scope with ERC-1271 smart wallet signature
-- [ ] Register scope with ERC-6492 counterfactual signature
-- [ ] Register scope triggers auto-deposit when balance insufficient but allowance exists
-- [ ] Register scope emits AuthorizationScopeRegistered event
-- [ ] Register scope updates user state correctly
-- [ ] Register scope updates agent state correctly
-- [ ] Register scope updates authorizationScopes mapping correctly
-- [ ] Register multiple scopes for same user
-- [ ] Register multiple scopes for same agent
-- [ ] Register scope updates user balance correctly (subtracts totalAmount)
+- [x] Register scope with valid signature and sufficient balance
+- [x] Register scope with EOA signature
+- [x] Register scope with ERC-1271 smart wallet signature
+- [x] Register scope with ERC-6492 counterfactual signature
+- [x] Register scope triggers auto-deposit when balance insufficient but allowance exists
+- [x] Register scope emits AuthorizationScopeRegistered event
+- [x] Register scope updates user state correctly
+- [x] Register scope updates agent state correctly
+- [x] Register scope updates authorizationScopes mapping correctly
+- [x] Register multiple scopes for same user
+- [x] Register multiple scopes for same agent
+- [x] Register scope updates user balance correctly (subtracts totalAmount)
+- [x] Register same scope twice (should revert with "Authorization scope already registered")
 
 ### 3.2 Edge Cases & Failures
 
@@ -616,14 +617,15 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 51
-- Section 2.1 - Direct Deposit (10 tests)
+**Completed**: 64
+- Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
-- Additional tests: 6 tests covering multiple users and edge cases
+- Section 3.1 - Valid Registration (13 tests including ERC-6492)
+- Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 149+
+**Not Started**: 136+
 
 ### Recent Updates
 - ✅ Implemented nonce-based replay protection for deposit signatures
@@ -637,6 +639,13 @@ test/
 - ✅ Verified SafeERC20 protection with various token behaviors
 - ✅ Added 6-decimal token support tests (`TestERC20_6Decimals`) to verify USDC/USDT-like token compatibility
 - ✅ Tested basic deposit, multiple deposits, and fractional amounts with 6-decimal tokens
+- ✅ Completed Section 3.1 - Authorization Scope Valid Registration (13 tests)
+- ✅ Created [test/ZeroLC/ZeroLC.authorization.test.ts](test/ZeroLC/ZeroLC.authorization.test.ts)
+- ✅ Tested EOA, ERC-1271, and ERC-6492 signatures for authorization scope registration
+- ✅ Verified auto-deposit functionality when balance insufficient
+- ✅ Tested duplicate scope registration prevention
+- ✅ Verified user/agent state updates and event emissions
+- ✅ Created SimpleCreate2Factory for testing CREATE2 deployments
 
 ---
 
