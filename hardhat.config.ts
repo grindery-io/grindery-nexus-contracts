@@ -293,7 +293,7 @@ const config: HardhatUserConfig = {
     clear: true,
     flat: true,
     format: "json",
-    except: ["Ownable.sol", "ECDSA.sol"],
+    except: ["Ownable.sol", "ECDSA.sol", "EIP712.sol"],
   },
 };
 

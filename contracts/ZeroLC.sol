@@ -69,7 +69,6 @@ struct Dispute {
 
 contract ZeroLC is
     EIP712,
-    UniversalSigValidator,
     ReentrancyGuardUpgradeable,
     OwnableUpgradeable,
     AccessControlUpgradeable
@@ -107,6 +106,7 @@ contract ZeroLC is
 
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     IERC20 public immutable gasToken;
+    UniversalSigValidator public immutable universalSigValidator;
 
     mapping(address => UserState) public userStates;
     mapping(address => bytes32[]) public agentAuthorizationScopes;
@@ -114,9 +114,17 @@ contract ZeroLC is
     mapping(bytes32 => bool) public disputedCharges;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _gasToken) EIP712("ZeroLC", "1") {
+    constructor(
+        address _gasToken,
+        address _universalSigValidator
+    ) EIP712("ZeroLC", "1") {
         require(_gasToken != address(0), "Invalid gas token address");
+        require(
+            _universalSigValidator != address(0),
+            "Invalid universal sig validator address"
+        );
         gasToken = IERC20(_gasToken);
+        universalSigValidator = UniversalSigValidator(_universalSigValidator);
         _disableInitializers();
     }
 
@@ -189,7 +197,7 @@ contract ZeroLC is
             )
         );
         require(
-            isValidSig(scope.user, digest, signature),
+            universalSigValidator.isValidSig(scope.user, digest, signature),
             "Invalid scope signature"
         );
         require(
@@ -257,7 +265,7 @@ contract ZeroLC is
             )
         );
         require(
-            isValidSig(scope.user, digest, signature),
+            universalSigValidator.isValidSig(scope.user, digest, signature),
             "Invalid scope signature"
         );
         uint48 newNotAfter = uint48(block.timestamp) + 300;
@@ -383,7 +391,11 @@ contract ZeroLC is
                 )
             );
             require(
-                isValidSig(chargeBatch.scope.user, digest, d.signature),
+                universalSigValidator.isValidSig(
+                    chargeBatch.scope.user,
+                    digest,
+                    d.signature
+                ),
                 "Invalid dispute signature"
             );
             uint48 totalChargedAmount = 0;
@@ -449,7 +461,7 @@ contract ZeroLC is
             )
         );
         require(
-            isValidSig(user, digest, signature),
+            universalSigValidator.isValidSig(user, digest, signature),
             "Invalid deposit signature"
         );
         _depositInternal(user, amount);

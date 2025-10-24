@@ -15,13 +15,16 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ## 1. Constructor & Initialization Tests
 
-- [ ] Constructor with valid gas token address
-- [ ] Constructor with zero address (should revert)
+- [ ] Constructor with valid gas token address and valid universal sig validator address
+- [ ] Constructor with zero gas token address (should revert)
+- [ ] Constructor with zero universal sig validator address (should revert)
 - [ ] Initialize function sets correct owner and roles
 - [ ] Cannot initialize twice (reinitializer protection)
 - [ ] Cannot call initialize on implementation contract
 - [ ] Domain separator is correct ("ZeroLC", "1")
 - [ ] Domain separator is chain-specific
+- [ ] Immutable gasToken reference is set correctly
+- [ ] Immutable universalSigValidator reference is set correctly
 
 ---
 
@@ -29,14 +32,13 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 2.1 Direct Deposit (no signature)
 
-- [ ] Deposit with valid amount increases user balance
-- [ ] Deposit with zero amount (should revert)
-- [ ] Deposit with insufficient token balance (should revert)
-- [ ] Deposit with insufficient allowance (should revert)
-- [ ] Deposit emits correct Deposit event
-- [ ] Deposit from contract address (msg.sender == address(this)) should revert
-- [ ] Reentrancy attack on deposit (should be blocked)
-- [ ] Multiple consecutive deposits accumulate correctly
+- [x] Deposit with valid amount increases user balance
+- [x] Deposit with zero amount (should revert)
+- [x] Deposit with insufficient token balance (should revert)
+- [x] Deposit with insufficient allowance (should revert)
+- [x] Deposit emits correct Deposit event
+- [x] Reentrancy attack on deposit (should be blocked)
+- [x] Multiple consecutive deposits accumulate correctly
 
 ### 2.2 Deposit with Signature
 
@@ -595,9 +597,9 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 0
+**Completed**: 7 (Section 2.1 - Direct Deposit)
 **In Progress**: 0
-**Not Started**: 200+
+**Not Started**: 193+
 
 ---
 
