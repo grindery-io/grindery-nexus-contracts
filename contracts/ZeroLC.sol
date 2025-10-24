@@ -58,6 +58,7 @@ struct UserState {
     uint256 balance;
     uint256 numCharges;
     uint256 numDisputes;
+    uint256 nonce;
     bytes32[] authorizationScopeHashes;
 }
 
@@ -451,12 +452,14 @@ contract ZeroLC is
         uint256 amount,
         bytes calldata signature
     ) external nonReentrant {
+        uint256 nonce = userStates[user].nonce;
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    keccak256("Deposit(address user,uint256 amount)"),
+                    keccak256("Deposit(address user,uint256 amount,uint256 nonce)"),
                     user,
-                    amount
+                    amount,
+                    nonce
                 )
             )
         );
@@ -464,6 +467,7 @@ contract ZeroLC is
             universalSigValidator.isValidSig(user, digest, signature),
             "Invalid deposit signature"
         );
+        userStates[user].nonce = nonce + 1;
         _depositInternal(user, amount);
     }
 

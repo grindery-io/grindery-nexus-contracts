@@ -42,15 +42,27 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 2.2 Deposit with Signature
 
-- [ ] Deposit with valid signature from EOA
-- [ ] Deposit with valid ERC-1271 signature from smart contract wallet
-- [ ] Deposit with invalid signature (should revert)
-- [ ] Deposit with signature from wrong signer (should revert)
-- [ ] Deposit with malformed signature (should revert)
-- [ ] Deposit with ERC-6492 counterfactual signature
-- [ ] Reentrancy attack on signed deposit (should be blocked)
-- [ ] Deposit to zero address (should revert)
-- [ ] Deposit signature has correct EIP712 type hash
+- [x] Deposit with valid signature from EOA
+- [x] Deposit emits correct event when using signature
+- [x] Third party can submit deposit with valid signature
+- [x] Deposit with valid ERC-1271 signature from smart contract wallet
+- [x] Deposit with invalid ERC-1271 signature (should revert)
+- [x] Deposit with invalid signature (should revert)
+- [x] Deposit with signature from wrong signer (should revert)
+- [x] Deposit with malformed signature (should revert)
+- [x] Deposit with signature for different amount (should revert)
+- [x] Deposit with signature for different user (should revert)
+- [x] Deposit with ERC-6492 counterfactual signature
+- [x] Reentrancy attack on signed deposit (should be blocked)
+- [x] Deposit to zero address (should revert)
+- [x] Deposit signature has correct EIP712 type hash (includes nonce)
+- [x] Deposit signature with wrong domain name (should revert)
+- [x] Deposit signature with wrong domain version (should revert)
+- [x] Nonce increments after successful deposit
+- [x] Replay attack prevention - reused signature rejected
+- [x] Sequential deposits with incrementing nonces work correctly
+- [x] Signature with future nonce rejected
+- [x] Signature with old nonce rejected
 
 ### 2.3 Gas Token Integration
 
@@ -397,14 +409,13 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ## 12. EIP712 Tests
 
-- [ ] Domain separator correct ("ZeroLC", "1")
-- [ ] Domain separator is chain-specific
+- [x] Domain separator correct ("ZeroLC", "1")
+- [x] Domain separator is chain-specific
 - [ ] getScopeHash produces correct hash
 - [ ] AuthorizationScope type hash includes all fields
-- [ ] Deposit type hash is correct
+- [x] Deposit type hash is correct (includes nonce: `Deposit(address user,uint256 amount,uint256 nonce)`)
 - [ ] RevokeAuthorizationScope type hash is correct
 - [ ] Dispute type hash is correct
-- [ ] Signature replay protection across chains
 
 ---
 
@@ -474,11 +485,15 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 16.1 Signature Attacks
 
+- [x] Signature replay attacks prevented (nonce-based for deposits)
 - [ ] Signature replay attacks prevented (different scopes)
-- [ ] Signature replay across chains prevented (domain separator)
+- [x] Signature replay across chains prevented (domain separator)
 - [ ] Signature malleability attacks
 - [ ] Front-running signature submission
 - [ ] Signature expiration (via scope expiration)
+- [x] Deposit signature replay attack with same nonce (prevented)
+- [x] Deposit signature with future nonce (prevented)
+- [x] Deposit signature with old nonce (prevented)
 
 ### 16.2 Economic Attacks
 
@@ -597,11 +612,23 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 7 (Section 2.1 - Direct Deposit)
+**Completed**: 37
+- Section 2.1 - Direct Deposit (10 tests)
+- Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
+- Additional tests: 6 tests covering multiple users and edge cases
+
 **In Progress**: 0
-**Not Started**: 193+
+**Not Started**: 163+
+
+### Recent Updates
+- ✅ Implemented nonce-based replay protection for deposit signatures
+- ✅ Added `nonce` field to `UserState` struct
+- ✅ Updated EIP712 Deposit type to include nonce: `Deposit(address user,uint256 amount,uint256 nonce)`
+- ✅ Added comprehensive replay attack prevention tests
+- ✅ Added tests for ERC-1271 and ERC-6492 signature support
+- ✅ Created `MockERC1271Wallet` contract for testing smart contract wallet signatures
 
 ---
 
-**Last Updated**: 2025-10-23
-**Contract Version**: ZeroLC.sol (latest)
+**Last Updated**: 2025-10-24
+**Contract Version**: ZeroLC.sol (with nonce-based replay protection)
