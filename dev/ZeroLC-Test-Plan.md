@@ -66,12 +66,16 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 2.3 Gas Token Integration
 
-- [ ] SafeERC20 transfer protection works
-- [ ] Transfer with non-standard ERC20 (no return value)
-- [ ] Transfer with reverting token
-- [ ] Transfer with token that returns false
-- [ ] Allowance checks work correctly
-- [ ] Token balance checks work correctly
+- [x] SafeERC20 transfer protection works
+- [x] Transfer with non-standard ERC20 (no return value)
+- [x] Transfer with reverting token
+- [x] Transfer with token that returns false
+- [x] Allowance checks work correctly
+- [x] Token balance checks work correctly
+- [x] Token with non-standard decimals (6 decimals like USDC)
+  - [x] Basic deposit with 6-decimal token
+  - [x] Multiple deposits with 6-decimal token
+  - [x] Fractional amounts with 6 decimals
 
 ---
 
@@ -612,13 +616,14 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 37
+**Completed**: 51
 - Section 2.1 - Direct Deposit (10 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
+- Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
 - Additional tests: 6 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 163+
+**Not Started**: 149+
 
 ### Recent Updates
 - ✅ Implemented nonce-based replay protection for deposit signatures
@@ -627,6 +632,11 @@ test/
 - ✅ Added comprehensive replay attack prevention tests
 - ✅ Added tests for ERC-1271 and ERC-6492 signature support
 - ✅ Created `MockERC1271Wallet` contract for testing smart contract wallet signatures
+- ✅ Completed Section 2.3 - Gas Token Integration tests
+- ✅ Created mock tokens for testing: `NonStandardERC20`, `FalseReturningERC20`, `RevertingERC20`
+- ✅ Verified SafeERC20 protection with various token behaviors
+- ✅ Added 6-decimal token support tests (`TestERC20_6Decimals`) to verify USDC/USDT-like token compatibility
+- ✅ Tested basic deposit, multiple deposits, and fractional amounts with 6-decimal tokens
 
 ---
 

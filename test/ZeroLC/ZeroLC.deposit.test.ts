@@ -1,7 +1,7 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { ZeroLC, TestERC20, UniversalSigValidator } from "../../typechain-types";
+import { ZeroLC, TestERC20, UniversalSigValidator, TestERC20_6Decimals } from "../../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("ZeroLC - Direct Deposit (no signature)", function () {
@@ -1067,6 +1067,600 @@ describe("ZeroLC - Deposit with Signature", function () {
           signature0
         )
       ).to.be.revertedWith("Invalid deposit signature");
+    });
+  });
+});
+
+describe("ZeroLC - Gas Token Integration", function () {
+  // Fixture to deploy the contract and set up test environment
+  async function deployZeroLCFixture() {
+    const [owner, user1, user2, agent1] = await ethers.getSigners();
+
+    // Deploy test ERC20 token to use as gas token
+    const TestERC20Factory = await ethers.getContractFactory("TestERC20");
+    const gasToken = (await TestERC20Factory.deploy(ethers.parseEther("1000000"))) as TestERC20;
+    await gasToken.waitForDeployment();
+
+    // Deploy UniversalSigValidator
+    const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+    const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+    await universalSigValidator.waitForDeployment();
+
+    // Deploy ZeroLC contract as implementation
+    const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+    const zeroLCImpl = (await ZeroLCFactory.deploy(
+      await gasToken.getAddress(),
+      await universalSigValidator.getAddress()
+    )) as ZeroLC;
+    await zeroLCImpl.waitForDeployment();
+
+    // Deploy a proxy pointing to the implementation
+    const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+    const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+    const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+    await proxy.waitForDeployment();
+
+    // Get the ZeroLC interface attached to the proxy address
+    const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+    // Distribute tokens to test users
+    await gasToken.transfer(user1.address, ethers.parseEther("10000"));
+    await gasToken.transfer(user2.address, ethers.parseEther("10000"));
+
+    return {
+      zeroLC,
+      gasToken,
+      universalSigValidator,
+      owner,
+      user1,
+      user2,
+      agent1,
+    };
+  }
+
+  describe("SafeERC20 transfer protection works", function () {
+    it("should successfully transfer with standard ERC20", async function () {
+      const { zeroLC, gasToken, user1 } = await loadFixture(deployZeroLCFixture);
+
+      const depositAmount = ethers.parseEther("100");
+
+      // Approve tokens
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Deposit should succeed with standard ERC20
+      await expect(zeroLC.connect(user1)["deposit(uint256)"](depositAmount))
+        .to.emit(zeroLC, "Deposit")
+        .withArgs(user1.address, depositAmount);
+
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
+    });
+  });
+
+  describe("Transfer with non-standard ERC20 (no return value)", function () {
+    it("should handle token with no return value using SafeERC20", async function () {
+      const { owner, user1 } = await loadFixture(deployZeroLCFixture);
+
+      // Deploy non-standard ERC20 (no return value)
+      const NonStandardERC20Factory = await ethers.getContractFactory("NonStandardERC20");
+      const nonStandardToken = await NonStandardERC20Factory.deploy(ethers.parseEther("1000000"));
+      await nonStandardToken.waitForDeployment();
+
+      // Deploy UniversalSigValidator
+      const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+      const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+      await universalSigValidator.waitForDeployment();
+
+      // Deploy ZeroLC with non-standard token
+      const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+      const zeroLCImpl = await ZeroLCFactory.deploy(
+        await nonStandardToken.getAddress(),
+        await universalSigValidator.getAddress()
+      );
+      await zeroLCImpl.waitForDeployment();
+
+      // Deploy proxy
+      const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+      const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+      const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+
+      const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+      // Transfer tokens to user1
+      await nonStandardToken.transfer(user1.address, ethers.parseEther("1000"));
+
+      const depositAmount = ethers.parseEther("100");
+
+      // Approve tokens
+      await nonStandardToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Deposit should succeed even without return value (SafeERC20 handles this)
+      await expect(zeroLC.connect(user1)["deposit(uint256)"](depositAmount))
+        .to.emit(zeroLC, "Deposit")
+        .withArgs(user1.address, depositAmount);
+
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
+    });
+  });
+
+  describe("Transfer with reverting token", function () {
+    it("should revert when token transfer reverts", async function () {
+      const { owner, user1 } = await loadFixture(deployZeroLCFixture);
+
+      // Deploy reverting ERC20
+      const RevertingERC20Factory = await ethers.getContractFactory("RevertingERC20");
+      const revertingToken = await RevertingERC20Factory.deploy(ethers.parseEther("1000000"));
+      await revertingToken.waitForDeployment();
+
+      // Deploy UniversalSigValidator
+      const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+      const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+      await universalSigValidator.waitForDeployment();
+
+      // Deploy ZeroLC with reverting token
+      const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+      const zeroLCImpl = await ZeroLCFactory.deploy(
+        await revertingToken.getAddress(),
+        await universalSigValidator.getAddress()
+      );
+      await zeroLCImpl.waitForDeployment();
+
+      // Deploy proxy
+      const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+      const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+      const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+
+      const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+      // Transfer tokens to user1
+      await revertingToken.transfer(user1.address, ethers.parseEther("1000"));
+
+      const depositAmount = ethers.parseEther("100");
+
+      // Approve tokens
+      await revertingToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Set token to revert on transfer
+      await revertingToken.setRevert(true);
+
+      // Deposit should revert
+      await expect(
+        zeroLC.connect(user1)["deposit(uint256)"](depositAmount)
+      ).to.be.revertedWith("TransferFrom reverted");
+
+      // Balance should remain 0
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(0);
+    });
+
+    it("should succeed when token is not reverting", async function () {
+      const { owner, user1 } = await loadFixture(deployZeroLCFixture);
+
+      // Deploy reverting ERC20
+      const RevertingERC20Factory = await ethers.getContractFactory("RevertingERC20");
+      const revertingToken = await RevertingERC20Factory.deploy(ethers.parseEther("1000000"));
+      await revertingToken.waitForDeployment();
+
+      // Deploy UniversalSigValidator
+      const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+      const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+      await universalSigValidator.waitForDeployment();
+
+      // Deploy ZeroLC with reverting token
+      const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+      const zeroLCImpl = await ZeroLCFactory.deploy(
+        await revertingToken.getAddress(),
+        await universalSigValidator.getAddress()
+      );
+      await zeroLCImpl.waitForDeployment();
+
+      // Deploy proxy
+      const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+      const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+      const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+
+      const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+      // Transfer tokens to user1
+      await revertingToken.transfer(user1.address, ethers.parseEther("1000"));
+
+      const depositAmount = ethers.parseEther("100");
+
+      // Approve tokens
+      await revertingToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Keep token in non-reverting state (default is false)
+      // Deposit should succeed
+      await expect(zeroLC.connect(user1)["deposit(uint256)"](depositAmount))
+        .to.emit(zeroLC, "Deposit")
+        .withArgs(user1.address, depositAmount);
+
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
+    });
+  });
+
+  describe("Transfer with token that returns false", function () {
+    it("should revert when token returns false on transfer", async function () {
+      const { owner, user1 } = await loadFixture(deployZeroLCFixture);
+
+      // Deploy false-returning ERC20
+      const FalseReturningERC20Factory = await ethers.getContractFactory("FalseReturningERC20");
+      const falseToken = await FalseReturningERC20Factory.deploy(ethers.parseEther("1000000"));
+      await falseToken.waitForDeployment();
+
+      // Deploy UniversalSigValidator
+      const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+      const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+      await universalSigValidator.waitForDeployment();
+
+      // Deploy ZeroLC with false-returning token
+      const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+      const zeroLCImpl = await ZeroLCFactory.deploy(
+        await falseToken.getAddress(),
+        await universalSigValidator.getAddress()
+      );
+      await zeroLCImpl.waitForDeployment();
+
+      // Deploy proxy
+      const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+      const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+      const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+
+      const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+      // Transfer tokens to user1
+      await falseToken.transfer(user1.address, ethers.parseEther("1000"));
+
+      const depositAmount = ethers.parseEther("100");
+
+      // Approve tokens
+      await falseToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Set token to return false on transfer
+      await falseToken.setFailTransfer(true);
+
+      // Deposit should revert (SafeERC20 catches false return)
+      await expect(
+        zeroLC.connect(user1)["deposit(uint256)"](depositAmount)
+      ).to.be.reverted;
+
+      // Balance should remain 0
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(0);
+    });
+
+    it("should succeed when token returns true", async function () {
+      const { owner, user1 } = await loadFixture(deployZeroLCFixture);
+
+      // Deploy false-returning ERC20
+      const FalseReturningERC20Factory = await ethers.getContractFactory("FalseReturningERC20");
+      const falseToken = await FalseReturningERC20Factory.deploy(ethers.parseEther("1000000"));
+      await falseToken.waitForDeployment();
+
+      // Deploy UniversalSigValidator
+      const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+      const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+      await universalSigValidator.waitForDeployment();
+
+      // Deploy ZeroLC with false-returning token
+      const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+      const zeroLCImpl = await ZeroLCFactory.deploy(
+        await falseToken.getAddress(),
+        await universalSigValidator.getAddress()
+      );
+      await zeroLCImpl.waitForDeployment();
+
+      // Deploy proxy
+      const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+      const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+      const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+
+      const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+      // Transfer tokens to user1
+      await falseToken.transfer(user1.address, ethers.parseEther("1000"));
+
+      const depositAmount = ethers.parseEther("100");
+
+      // Approve tokens
+      await falseToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Keep token in normal state (returns true, default)
+      // Deposit should succeed
+      await expect(zeroLC.connect(user1)["deposit(uint256)"](depositAmount))
+        .to.emit(zeroLC, "Deposit")
+        .withArgs(user1.address, depositAmount);
+
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
+    });
+  });
+
+  describe("Allowance checks work correctly", function () {
+    it("should correctly check allowance before transfer", async function () {
+      const { zeroLC, gasToken, user1 } = await loadFixture(deployZeroLCFixture);
+
+      const depositAmount = ethers.parseEther("100");
+
+      // Check that allowance is 0 initially
+      const allowanceBefore = await gasToken.allowance(user1.address, await zeroLC.getAddress());
+      expect(allowanceBefore).to.equal(0);
+
+      // Deposit should fail without allowance
+      await expect(
+        zeroLC.connect(user1)["deposit(uint256)"](depositAmount)
+      ).to.be.reverted;
+
+      // Set allowance
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Check allowance is now set
+      const allowanceAfter = await gasToken.allowance(user1.address, await zeroLC.getAddress());
+      expect(allowanceAfter).to.equal(depositAmount);
+
+      // Deposit should now succeed
+      await zeroLC.connect(user1)["deposit(uint256)"](depositAmount);
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
+
+      // Check allowance was consumed
+      const allowanceFinal = await gasToken.allowance(user1.address, await zeroLC.getAddress());
+      expect(allowanceFinal).to.equal(0);
+    });
+
+    it("should fail with partial allowance", async function () {
+      const { zeroLC, gasToken, user1 } = await loadFixture(deployZeroLCFixture);
+
+      const depositAmount = ethers.parseEther("100");
+      const partialAllowance = ethers.parseEther("50");
+
+      // Set partial allowance
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), partialAllowance);
+
+      // Deposit should fail with insufficient allowance
+      await expect(
+        zeroLC.connect(user1)["deposit(uint256)"](depositAmount)
+      ).to.be.reverted;
+
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(0);
+    });
+  });
+
+  describe("Token balance checks work correctly", function () {
+    it("should verify user has sufficient token balance", async function () {
+      const { zeroLC, gasToken, user1 } = await loadFixture(deployZeroLCFixture);
+
+      // User1 has 10000 tokens
+      const userBalance = await gasToken.balanceOf(user1.address);
+      expect(userBalance).to.equal(ethers.parseEther("10000"));
+
+      const depositAmount = ethers.parseEther("5000");
+
+      // Approve tokens
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Deposit should succeed with sufficient balance
+      await zeroLC.connect(user1)["deposit(uint256)"](depositAmount);
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
+
+      // User's token balance should decrease
+      const newUserBalance = await gasToken.balanceOf(user1.address);
+      expect(newUserBalance).to.equal(ethers.parseEther("5000"));
+    });
+
+    it("should fail when user has insufficient token balance", async function () {
+      const { zeroLC, gasToken, user1 } = await loadFixture(deployZeroLCFixture);
+
+      // User1 has 10000 tokens, try to deposit more
+      const depositAmount = ethers.parseEther("20000");
+
+      // Approve tokens (approval will work but transfer will fail)
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Deposit should fail due to insufficient token balance
+      await expect(
+        zeroLC.connect(user1)["deposit(uint256)"](depositAmount)
+      ).to.be.reverted;
+
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(0);
+    });
+
+    it("should correctly handle exact balance deposit", async function () {
+      const { zeroLC, gasToken, user1 } = await loadFixture(deployZeroLCFixture);
+
+      // User1 has exactly 10000 tokens
+      const userBalance = await gasToken.balanceOf(user1.address);
+      const depositAmount = userBalance; // Deposit exact balance
+
+      // Approve tokens
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Deposit should succeed
+      await zeroLC.connect(user1)["deposit(uint256)"](depositAmount);
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
+
+      // User should have 0 tokens left
+      expect(await gasToken.balanceOf(user1.address)).to.equal(0);
+    });
+  });
+
+  describe("Token with non-standard decimals (6 decimals like USDC)", function () {
+    it("should work correctly with 6-decimal token (USDC-like)", async function () {
+      const { user1 } = await loadFixture(deployZeroLCFixture);
+
+      // Deploy 6-decimal ERC20 (like USDC/USDT)
+      const TestERC20_6DecimalsFactory = await ethers.getContractFactory("TestERC20_6Decimals");
+      const usdcToken = (await TestERC20_6DecimalsFactory.deploy(1000000n * 10n ** 6n)) as TestERC20_6Decimals; // 1M USDC
+      await usdcToken.waitForDeployment();
+
+      // Verify decimals
+      expect(await usdcToken.decimals()).to.equal(6);
+
+      // Deploy UniversalSigValidator
+      const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+      const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+      await universalSigValidator.waitForDeployment();
+
+      // Deploy ZeroLC with 6-decimal token
+      const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+      const zeroLCImpl = (await ZeroLCFactory.deploy(
+        await usdcToken.getAddress(),
+        await universalSigValidator.getAddress()
+      )) as ZeroLC;
+      await zeroLCImpl.waitForDeployment();
+
+      // Deploy proxy
+      const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+      const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+      const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+
+      const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+      // Transfer USDC to user1 (10,000 USDC = 10000 * 10^6)
+      const usdcAmount = 10000n * 10n ** 6n;
+      await usdcToken.transfer(user1.address, usdcAmount);
+
+      // Verify user1 has USDC
+      expect(await usdcToken.balanceOf(user1.address)).to.equal(usdcAmount);
+
+      // Deposit 100 USDC
+      const depositAmount = 100n * 10n ** 6n;
+
+      // Approve tokens
+      await usdcToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Check balance before deposit
+      const balanceBefore = await zeroLC.balanceOf(user1.address);
+      expect(balanceBefore).to.equal(0);
+
+      // Perform deposit
+      await expect(zeroLC.connect(user1)["deposit(uint256)"](depositAmount))
+        .to.emit(zeroLC, "Deposit")
+        .withArgs(user1.address, depositAmount);
+
+      // Check balance after deposit (should be exact amount in 6 decimals)
+      const balanceAfter = await zeroLC.balanceOf(user1.address);
+      expect(balanceAfter).to.equal(depositAmount);
+
+      // User's USDC balance should decrease
+      const userUsdcBalance = await usdcToken.balanceOf(user1.address);
+      expect(userUsdcBalance).to.equal(usdcAmount - depositAmount);
+    });
+
+    it("should handle multiple deposits with 6-decimal token", async function () {
+      const { user1 } = await loadFixture(deployZeroLCFixture);
+
+      // Deploy 6-decimal ERC20
+      const TestERC20_6DecimalsFactory = await ethers.getContractFactory("TestERC20_6Decimals");
+      const usdcToken = (await TestERC20_6DecimalsFactory.deploy(1000000n * 10n ** 6n)) as TestERC20_6Decimals;
+      await usdcToken.waitForDeployment();
+
+      // Deploy UniversalSigValidator
+      const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+      const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+      await universalSigValidator.waitForDeployment();
+
+      // Deploy ZeroLC with 6-decimal token
+      const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+      const zeroLCImpl = (await ZeroLCFactory.deploy(
+        await usdcToken.getAddress(),
+        await universalSigValidator.getAddress()
+      )) as ZeroLC;
+      await zeroLCImpl.waitForDeployment();
+
+      // Deploy proxy
+      const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+      const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+      const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+
+      const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+      // Transfer USDC to user1
+      const usdcAmount = 10000n * 10n ** 6n;
+      await usdcToken.transfer(user1.address, usdcAmount);
+
+      // Multiple deposits
+      const deposits = [
+        100n * 10n ** 6n,  // 100 USDC
+        50n * 10n ** 6n,   // 50 USDC
+        75n * 10n ** 6n,   // 75 USDC
+      ];
+
+      const totalDeposit = deposits.reduce((acc, val) => acc + val, 0n);
+
+      // Approve total amount
+      await usdcToken.connect(user1).approve(await zeroLC.getAddress(), totalDeposit);
+
+      let expectedBalance = 0n;
+
+      // Perform multiple deposits
+      for (const depositAmount of deposits) {
+        await zeroLC.connect(user1)["deposit(uint256)"](depositAmount);
+        expectedBalance += depositAmount;
+
+        const currentBalance = await zeroLC.balanceOf(user1.address);
+        expect(currentBalance).to.equal(expectedBalance);
+      }
+
+      // Final balance check
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(totalDeposit);
+
+      // User's USDC balance should reflect all deposits
+      const userUsdcBalance = await usdcToken.balanceOf(user1.address);
+      expect(userUsdcBalance).to.equal(usdcAmount - totalDeposit);
+    });
+
+    it("should correctly handle fractional amounts with 6 decimals", async function () {
+      const { user1 } = await loadFixture(deployZeroLCFixture);
+
+      // Deploy 6-decimal ERC20
+      const TestERC20_6DecimalsFactory = await ethers.getContractFactory("TestERC20_6Decimals");
+      const usdcToken = (await TestERC20_6DecimalsFactory.deploy(1000000n * 10n ** 6n)) as TestERC20_6Decimals;
+      await usdcToken.waitForDeployment();
+
+      // Deploy UniversalSigValidator
+      const UniversalSigValidatorFactory = await ethers.getContractFactory("UniversalSigValidator");
+      const universalSigValidator = (await UniversalSigValidatorFactory.deploy()) as UniversalSigValidator;
+      await universalSigValidator.waitForDeployment();
+
+      // Deploy ZeroLC with 6-decimal token
+      const ZeroLCFactory = await ethers.getContractFactory("ZeroLC");
+      const zeroLCImpl = (await ZeroLCFactory.deploy(
+        await usdcToken.getAddress(),
+        await universalSigValidator.getAddress()
+      )) as ZeroLC;
+      await zeroLCImpl.waitForDeployment();
+
+      // Deploy proxy
+      const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+      const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
+      const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
+      await proxy.waitForDeployment();
+
+      const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+      // Transfer USDC to user1
+      const usdcAmount = 10000n * 10n ** 6n;
+      await usdcToken.transfer(user1.address, usdcAmount);
+
+      // Deposit fractional amount: 123.456789 USDC
+      // With 6 decimals, this becomes 123.456789 rounded to 123456789 (raw units)
+      const depositAmount = 123456789n; // 123.456789 USDC
+
+      // Approve tokens
+      await usdcToken.connect(user1).approve(await zeroLC.getAddress(), depositAmount);
+
+      // Perform deposit
+      await zeroLC.connect(user1)["deposit(uint256)"](depositAmount);
+
+      // Check balance is exact
+      expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
+
+      // User's USDC balance should be exact
+      const userUsdcBalance = await usdcToken.balanceOf(user1.address);
+      expect(userUsdcBalance).to.equal(usdcAmount - depositAmount);
     });
   });
 });
