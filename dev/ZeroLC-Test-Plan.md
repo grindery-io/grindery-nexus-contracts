@@ -325,27 +325,27 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 7.1 balanceOf
 
-- [ ] balanceOf returns correct total (balance + all remainingAmounts)
-- [ ] balanceOf with no scopes (returns only balance)
-- [ ] balanceOf with multiple active scopes
-- [ ] balanceOf with expired scopes (includes expired scope amounts)
-- [ ] balanceOf after partial settlements
-- [ ] balanceOf after deposits
-- [ ] balanceOf after disputes
-- [ ] balanceOf for zero address
-- [ ] balanceOf for address with no state
+- [x] balanceOf returns correct total (balance + all remainingAmounts)
+- [x] balanceOf with no scopes (returns only balance)
+- [x] balanceOf with multiple active scopes
+- [x] balanceOf with expired scopes (includes expired scope amounts)
+- [x] balanceOf after partial settlements
+- [x] balanceOf after deposits
+- [x] balanceOf after disputes
+- [x] balanceOf for zero address
+- [x] balanceOf for address with no state
 
 ### 7.2 unlockedBalanceOf
 
-- [ ] unlockedBalanceOf returns balance + expired scope amounts only
-- [ ] unlockedBalanceOf with no scopes
-- [ ] unlockedBalanceOf with all active scopes (returns only balance)
-- [ ] unlockedBalanceOf with all expired scopes
-- [ ] unlockedBalanceOf with mixed active/expired scopes
-- [ ] unlockedBalanceOf at exact expiration boundary (notAfter == block.timestamp)
+- [x] unlockedBalanceOf returns balance + expired scope amounts only
+- [x] unlockedBalanceOf with no scopes
+- [x] unlockedBalanceOf with all active scopes (returns only balance)
+- [x] unlockedBalanceOf with all expired scopes
+- [x] unlockedBalanceOf with mixed active/expired scopes
+- [x] unlockedBalanceOf at exact expiration boundary (notAfter == block.timestamp)
 - [ ] unlockedBalanceOf after compaction
-- [ ] unlockedBalanceOf for zero address
-- [ ] unlockedBalanceOf for address with no state
+- [x] unlockedBalanceOf for zero address
+- [x] unlockedBalanceOf for address with no state
 
 ---
 
@@ -628,7 +628,7 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 178
+**Completed**: 194
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -648,79 +648,27 @@ test/
 - Section 5.8 - Empty Batch Validation (3 tests)
 - Section 5.9 - Event Emissions (5 tests)
 - Section 6.1 - Valid Disputes (11 tests)
+- Section 7.1 - balanceOf (9 tests)
+- Section 7.2 - unlockedBalanceOf (8 tests)
 - Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 22+
+**Not Started**: 6+
 
 ### Recent Updates
-- ✅ Implemented nonce-based replay protection for deposit signatures
-- ✅ Added `nonce` field to `UserState` struct
-- ✅ Updated EIP712 Deposit type to include nonce: `Deposit(address user,uint256 amount,uint256 nonce)`
-- ✅ Added comprehensive replay attack prevention tests
-- ✅ Added tests for ERC-1271 and ERC-6492 signature support
-- ✅ Created `MockERC1271Wallet` contract for testing smart contract wallet signatures
-- ✅ Completed Section 2.3 - Gas Token Integration tests
-- ✅ Created mock tokens for testing: `NonStandardERC20`, `FalseReturningERC20`, `RevertingERC20`
-- ✅ Verified SafeERC20 protection with various token behaviors
-- ✅ Added 6-decimal token support tests (`TestERC20_6Decimals`) to verify USDC/USDT-like token compatibility
-- ✅ Tested basic deposit, multiple deposits, and fractional amounts with 6-decimal tokens
-- ✅ Completed Section 3.1 - Authorization Scope Valid Registration (13 tests)
-- ✅ Completed Section 3.2 - Authorization Scope Edge Cases & Failures (13 tests)
-- ✅ Created [test/ZeroLC/ZeroLC.authorization.test.ts](test/ZeroLC/ZeroLC.authorization.test.ts)
-- ✅ Tested EOA, ERC-1271, and ERC-6492 signatures for authorization scope registration
-- ✅ Verified auto-deposit functionality when balance insufficient
-- ✅ Tested duplicate scope registration prevention
-- ✅ Verified user/agent state updates and event emissions
-- ✅ Created SimpleCreate2Factory for testing CREATE2 deployments
-- ✅ Comprehensive edge case testing: insufficient balance, invalid signatures, expired scopes, time boundaries
-- ✅ Tested self-dealing prevention (user == agent)
-- ✅ Tested validation for zero values (totalAmount, disputeWindow, agent address)
-- ✅ Boundary condition tests for notBefore/notAfter timestamps
-- ✅ Verified reentrancy protection on registration
-- ✅ Completed Section 3.4 - Auto-Deposit Logic (4 tests)
-- ✅ Verified auto-deposit triggers when balance insufficient but allowance exists
-- ✅ Tested auto-deposit deposits exact amount needed (totalAmount - balance)
-- ✅ Verified auto-deposit failures when allowance or token balance insufficient
-- ✅ Completed Section 3.5 - Scope Hash Calculation (4 tests)
-- ✅ Verified getScopeHash returns consistent hash for same scope
-- ✅ Verified different scopes produce different hashes
-- ✅ Confirmed scope hash includes domain separator
-- ✅ Verified scope hash uniquely identifies each scope
-- ✅ Completed Section 4 - Authorization Scope Revocation (18 tests)
-- ✅ Created [test/ZeroLC/ZeroLC.revocation.test.ts](test/ZeroLC/ZeroLC.revocation.test.ts)
-- ✅ Tested valid revocation with EOA and ERC-1271 signatures
-- ✅ Verified revocation sets notAfter to block.timestamp + 300
-- ✅ Tested revocation failure scenarios: expired scopes, invalid signatures, malformed data
-- ✅ Verified revocation doesn't affect user balance and properly shortens settlement window
-- ✅ Tested boundary conditions for revocation timing
-- ✅ Verified reentrancy protection on revocation
-- ✅ Completed Section 5 - Charge Settlement Tests (57 tests total across 9 subsections)
-- ✅ Created [test/ZeroLC/ZeroLC.settlement.test.ts](test/ZeroLC/ZeroLC.settlement.test.ts)
-- ✅ Implemented comprehensive charge batch settlement tests with agent ECDSA signatures
-- ✅ Critical fix: Signature verification requires signing ENCODED BYTES, not hash
-- ✅ Used ethers.getBytes() to convert hex strings to Uint8Array for proper message hashing
-- ✅ Tested single and multiple charge batches with batch part hash verification
-- ✅ Verified timestamp validation (60-second settlement window)
-- ✅ Tested nonce-based replay protection for charge entries (sequential nonces starting from 1)
-- ✅ Verified amount validation, entry expiration, and scope status checks
-- ✅ Tested empty batch validation and boundary conditions
-- ✅ Created [contracts/test/SettlementCaller.sol](contracts/test/SettlementCaller.sol) helper contract
-- ✅ Implemented Section 5.9 - Event Emissions tests for tx.origin vs msg.sender detection
-- ✅ Verified ChargesSettled() emitted when called directly (tx.origin == msg.sender)
-- ✅ Verified ChargesSettledFromContract(bytes) emitted when called from contract (tx.origin != msg.sender)
-- ✅ Completed Section 6.1 - Valid Disputes (11 tests)
-- ✅ Created [test/ZeroLC/ZeroLC.dispute.test.ts](test/ZeroLC/ZeroLC.dispute.test.ts)
-- ✅ Tested valid disputes within dispute window with EOA and ERC-1271 smart wallet signatures
-- ✅ Verified partial and full clawback amounts
-- ✅ Tested state updates: agentPendingAmount decrease, user balance increase, scope notAfter update
-- ✅ Verified numDisputes counter increment
-- ✅ Tested ChargeDisputed event emission
-- ✅ Implemented multiple disputes in single transaction (different batches)
-- ✅ Fixed timestamp issues using time.latest() instead of Date.now() for Hardhat compatibility
-- ✅ Used time.increase() for advancing blockchain time in tests
+- ✅ Completed Section 7 - Balance View Functions (17 tests total)
+- ✅ Created [test/ZeroLC/ZeroLC.balances.test.ts](test/ZeroLC/ZeroLC.balances.test.ts)
+- ✅ Implemented comprehensive tests for `balanceOf` function (9 tests)
+- ✅ Verified balanceOf includes all remainingAmounts regardless of expiration
+- ✅ Tested balanceOf after deposits, settlements, and disputes
+- ✅ Implemented comprehensive tests for `unlockedBalanceOf` function (8 tests)
+- ✅ Verified unlockedBalanceOf only includes expired scope amounts
+- ✅ Tested mixed active/expired scopes and exact boundary conditions
+- ✅ Confirmed that at exact boundary (notAfter == block.timestamp), scope IS considered expired
+- ✅ Used helper functions (depositForUser, registerScope, createChargeBatch) for cleaner test code
+- ✅ All balance tests use BigInt consistently for proper type handling
 
 ---
 
-**Last Updated**: 2025-10-25
+**Last Updated**: 2025-10-26
 **Contract Version**: ZeroLC.sol (with nonce-based replay protection)
