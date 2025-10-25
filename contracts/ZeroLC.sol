@@ -85,7 +85,7 @@ contract ZeroLC is
     event ChargesSettled();
 
     // Same as above, but with data attached, to handle cases when settled from a contract and calldata is hard to get
-    event ChargesSettled(bytes data);
+    event ChargesSettledFromContract(bytes data);
 
     event AuthorizationScopeRegistered(
         address indexed user,
@@ -361,7 +361,7 @@ contract ZeroLC is
             // Calldata can be easily retrieved
             emit ChargesSettled();
         } else {
-            emit ChargesSettled(abi.encode(chargeBatches));
+            emit ChargesSettledFromContract(abi.encode(chargeBatches));
         }
     }
 

@@ -1,7 +1,7 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { ZeroLC, TestERC20, UniversalSigValidator } from "../../typechain-types";
+import { ZeroLC, TestERC20, UniversalSigValidator, SettlementCaller } from "../../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("ZeroLC - Charge Settlement", function () {
@@ -35,6 +35,11 @@ describe("ZeroLC - Charge Settlement", function () {
 
     // Get the ZeroLC interface attached to the proxy address
     const zeroLC = ZeroLCFactory.attach(await proxy.getAddress()) as ZeroLC;
+
+    // Deploy SettlementCaller helper contract for testing contract-to-contract calls
+    const SettlementCallerFactory = await ethers.getContractFactory("SettlementCaller");
+    const settlementCaller = (await SettlementCallerFactory.deploy()) as SettlementCaller;
+    await settlementCaller.waitForDeployment();
 
     // Distribute tokens to test users
     await gasToken.transfer(user1.address, ethers.parseEther("10000"));
@@ -171,6 +176,7 @@ describe("ZeroLC - Charge Settlement", function () {
       zeroLC,
       gasToken,
       universalSigValidator,
+      settlementCaller,
       owner,
       user1,
       user2,
@@ -420,9 +426,10 @@ describe("ZeroLC - Charge Settlement", function () {
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
       ]);
 
-      // Settlement should succeed and emit some form of ChargesSettled event
+      // When called directly (tx.origin == msg.sender), should emit ChargesSettled event without parameters
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+        .to.emit(zeroLC, "ChargesSettled")
+        .to.not.emit(zeroLC, "ChargesSettledFromContract");
     });
 
     it("should maintain isNumChargesRecorded flag", async function () {
@@ -1355,6 +1362,226 @@ describe("ZeroLC - Charge Settlement", function () {
 
       await expect(zeroLC.settleCharges([chargeBatch]))
         .to.not.be.reverted;
+    });
+  });
+
+  describe("5.9 Event Emissions", function () {
+    it("should emit ChargesSettledFromContract when called from contract (tx.origin != msg.sender)", async function () {
+      const { zeroLC, settlementCaller, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const scope = await registerScope(user1, agent1, totalAmount);
+      const currentTime = await time.latest();
+
+      const chargeBatch = await createChargeBatch(scope, agent1, [
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+      ]);
+
+      // When called via contract, should emit ChargesSettledFromContract with encoded data
+      const tx = await settlementCaller.settleChargesViaContract(await zeroLC.getAddress(), [chargeBatch]);
+      const receipt = await tx.wait();
+
+      // Check that ChargesSettledFromContract was emitted
+      const events = receipt?.logs.filter((log: any) => {
+        try {
+          const parsed = zeroLC.interface.parseLog({
+            topics: log.topics as string[],
+            data: log.data
+          });
+          return parsed?.name === "ChargesSettledFromContract";
+        } catch {
+          return false;
+        }
+      });
+
+      expect(events).to.have.lengthOf(1);
+    });
+
+    it("should NOT emit ChargesSettled when called from contract", async function () {
+      const { zeroLC, settlementCaller, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const scope = await registerScope(user1, agent1, totalAmount);
+      const currentTime = await time.latest();
+
+      const chargeBatch = await createChargeBatch(scope, agent1, [
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+      ]);
+
+      const tx = await settlementCaller.settleChargesViaContract(await zeroLC.getAddress(), [chargeBatch]);
+      const receipt = await tx.wait();
+
+      // Check that ChargesSettled was NOT emitted
+      const chargesSettledEvents = receipt?.logs.filter((log: any) => {
+        try {
+          const parsed = zeroLC.interface.parseLog({
+            topics: log.topics as string[],
+            data: log.data
+          });
+          return parsed?.name === "ChargesSettled";
+        } catch {
+          return false;
+        }
+      });
+
+      expect(chargesSettledEvents).to.have.lengthOf(0);
+    });
+
+    it("should emit ChargesSettledFromContract with correct encoded data", async function () {
+      const { zeroLC, settlementCaller, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const scope = await registerScope(user1, agent1, totalAmount);
+      const currentTime = await time.latest();
+
+      const chargeBatch = await createChargeBatch(scope, agent1, [
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+      ]);
+
+      const tx = await settlementCaller.settleChargesViaContract(await zeroLC.getAddress(), [chargeBatch]);
+      const receipt = await tx.wait();
+
+      const events = receipt?.logs.filter((log: any) => {
+        try {
+          const parsed = zeroLC.interface.parseLog({
+            topics: log.topics as string[],
+            data: log.data
+          });
+          return parsed?.name === "ChargesSettledFromContract";
+        } catch {
+          return false;
+        }
+      });
+
+      expect(events).to.have.lengthOf(1);
+
+      // Verify the emitted data contains the encoded chargeBatches array
+      if (events && events.length > 0) {
+        const parsedEvent = zeroLC.interface.parseLog({
+          topics: events[0].topics as string[],
+          data: events[0].data
+        });
+
+        expect(parsedEvent?.name).to.equal("ChargesSettledFromContract");
+        expect(parsedEvent?.args.data).to.not.be.undefined;
+
+        // The data should be the ABI-encoded chargeBatches array
+        const encodedBatches = ethers.AbiCoder.defaultAbiCoder().encode(
+          ["tuple(tuple(address user,uint48 totalAmount,uint48 disputeWindow,address agent,uint48 notBefore,uint48 notAfter) scope,tuple(uint48 amount,uint48 nonce,uint48 notAfter)[] entries,uint48 timestamp,bytes agentSignature)[]"],
+          [[chargeBatch]]
+        );
+
+        expect(parsedEvent?.args.data).to.equal(encodedBatches);
+      }
+    });
+
+    it("should emit ChargesSettledFromContract with multiple batches", async function () {
+      const { zeroLC, settlementCaller, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const scope = await registerScope(user1, agent1, totalAmount);
+      const currentTime = await time.latest();
+
+      const chargeBatch1 = await createChargeBatch(scope, agent1, [
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+      ]);
+
+      await time.increase(5);
+      const laterTime = await time.latest();
+      const chargeBatch2 = await createChargeBatch(scope, agent1, [
+        { amount: 2000n, nonce: 2, notAfter: laterTime + 3600 }
+      ]);
+
+      const tx = await settlementCaller.settleChargesViaContract(
+        await zeroLC.getAddress(),
+        [chargeBatch1, chargeBatch2]
+      );
+      const receipt = await tx.wait();
+
+      const events = receipt?.logs.filter((log: any) => {
+        try {
+          const parsed = zeroLC.interface.parseLog({
+            topics: log.topics as string[],
+            data: log.data
+          });
+          return parsed?.name === "ChargesSettledFromContract";
+        } catch {
+          return false;
+        }
+      });
+
+      expect(events).to.have.lengthOf(1);
+
+      // Verify the data contains both batches
+      if (events && events.length > 0) {
+        const parsedEvent = zeroLC.interface.parseLog({
+          topics: events[0].topics as string[],
+          data: events[0].data
+        });
+
+        const encodedBatches = ethers.AbiCoder.defaultAbiCoder().encode(
+          ["tuple(tuple(address user,uint48 totalAmount,uint48 disputeWindow,address agent,uint48 notBefore,uint48 notAfter) scope,tuple(uint48 amount,uint48 nonce,uint48 notAfter)[] entries,uint48 timestamp,bytes agentSignature)[]"],
+          [[chargeBatch1, chargeBatch2]]
+        );
+
+        expect(parsedEvent?.args.data).to.equal(encodedBatches);
+      }
+    });
+
+    it("should use tx.origin vs msg.sender to determine which event to emit", async function () {
+      const { zeroLC, settlementCaller, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const scope = await registerScope(user1, agent1, totalAmount);
+      const currentTime = await time.latest();
+
+      const chargeBatch1 = await createChargeBatch(scope, agent1, [
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+      ]);
+
+      // Direct call: tx.origin == msg.sender -> ChargesSettled
+      await expect(zeroLC.settleCharges([chargeBatch1]))
+        .to.emit(zeroLC, "ChargesSettled")
+        .to.not.emit(zeroLC, "ChargesSettledFromContract");
+
+      // Contract call: tx.origin != msg.sender -> ChargesSettledFromContract
+      await time.increase(5);
+      const laterTime = await time.latest();
+      const chargeBatch2 = await createChargeBatch(scope, agent1, [
+        { amount: 2000n, nonce: 2, notAfter: laterTime + 3600 }
+      ]);
+
+      const tx = await settlementCaller.settleChargesViaContract(await zeroLC.getAddress(), [chargeBatch2]);
+      const receipt = await tx.wait();
+
+      const fromContractEvents = receipt?.logs.filter((log: any) => {
+        try {
+          const parsed = zeroLC.interface.parseLog({
+            topics: log.topics as string[],
+            data: log.data
+          });
+          return parsed?.name === "ChargesSettledFromContract";
+        } catch {
+          return false;
+        }
+      });
+
+      expect(fromContractEvents).to.have.lengthOf(1);
     });
   });
 });
