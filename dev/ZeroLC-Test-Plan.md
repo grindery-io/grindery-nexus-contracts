@@ -142,20 +142,25 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ## 4. Authorization Scope Revocation Tests
 
-- [ ] Revoke scope with valid signature
-- [ ] Revoke scope sets notAfter to block.timestamp + 300
-- [ ] Revoke scope with invalid signature (should revert)
-- [ ] Revoke already expired scope (should revert)
-- [ ] Revoke scope with remainingAmount == 0 (should revert)
-- [ ] Revoke scope with newNotAfter >= current notAfter (should revert)
-- [ ] Revoke scope at exact boundary (notAfter == newNotAfter + 1)
-- [ ] Revoke scope emits AuthorizationScopeRevoking event
-- [ ] Revoke scope twice (second should fail)
-- [ ] Revoke scope after partial charges
-- [ ] Revoke scope with valid ERC-1271 signature
-- [ ] Revoke scope maintains remainingAmount correctly
-- [ ] Revoke scope maintains agentPendingAmount correctly
-- [ ] Reentrancy attack on revocation (should be blocked)
+- [x] Revoke scope with valid signature
+- [x] Revoke scope sets notAfter to block.timestamp + 300
+- [x] Revoke scope with invalid signature (should revert)
+- [x] Revoke already expired scope (should revert)
+- [ ] Revoke scope with remainingAmount == 0 (should revert) - pending settlement tests
+- [x] Revoke scope with newNotAfter >= current notAfter (should revert)
+- [x] Revoke scope at exact boundary (notAfter == newNotAfter + few seconds)
+- [x] Revoke scope emits AuthorizationScopeRevoking event
+- [x] Revoke scope twice (second should fail)
+- [x] Revoke scope after partial charges
+- [x] Revoke scope with valid ERC-1271 signature
+- [x] Revoke scope maintains remainingAmount correctly
+- [x] Revoke scope maintains agentPendingAmount correctly
+- [x] Reentrancy attack on revocation (should be blocked)
+- [x] Revoke with malformed signature (should revert)
+- [x] Revoke non-existent scope (should revert)
+- [x] Revoke with very long initial duration
+- [x] Revocation doesn't affect user balance
+- [x] Revocation shortens time window for settlements
 
 ---
 
@@ -617,7 +622,7 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 92
+**Completed**: 110
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -626,10 +631,11 @@ test/
 - Section 3.3 - EIP712 Signature Verification (7 tests)
 - Section 3.4 - Auto-Deposit Logic (4 tests)
 - Section 3.5 - Scope Hash Calculation (4 tests)
+- Section 4 - Authorization Scope Revocation (18 tests)
 - Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 108+
+**Not Started**: 90+
 
 ### Recent Updates
 - ✅ Implemented nonce-based replay protection for deposit signatures
@@ -665,6 +671,14 @@ test/
 - ✅ Verified different scopes produce different hashes
 - ✅ Confirmed scope hash includes domain separator
 - ✅ Verified scope hash uniquely identifies each scope
+- ✅ Completed Section 4 - Authorization Scope Revocation (18 tests)
+- ✅ Created [test/ZeroLC/ZeroLC.revocation.test.ts](test/ZeroLC/ZeroLC.revocation.test.ts)
+- ✅ Tested valid revocation with EOA and ERC-1271 signatures
+- ✅ Verified revocation sets notAfter to block.timestamp + 300
+- ✅ Tested revocation failure scenarios: expired scopes, invalid signatures, malformed data
+- ✅ Verified revocation doesn't affect user balance and properly shortens settlement window
+- ✅ Tested boundary conditions for revocation timing
+- ✅ Verified reentrancy protection on revocation
 
 ---
 
