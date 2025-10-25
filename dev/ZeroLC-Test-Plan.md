@@ -116,13 +116,13 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 3.3 EIP712 Signature Verification
 
-- [ ] Signature includes all fields: user, totalAmount, disputeWindow, agent, notBefore, notAfter
-- [ ] Signature verification with tampered user address fails
-- [ ] Signature verification with tampered totalAmount fails
-- [ ] Signature verification with tampered disputeWindow fails
-- [ ] Signature verification with tampered agent fails
-- [ ] Signature verification with tampered notBefore fails
-- [ ] Signature verification with tampered notAfter fails
+- [x] Signature includes all fields: user, totalAmount, disputeWindow, agent, notBefore, notAfter
+- [x] Signature verification with tampered user address fails
+- [x] Signature verification with tampered totalAmount fails
+- [x] Signature verification with tampered disputeWindow fails
+- [x] Signature verification with tampered agent fails
+- [x] Signature verification with tampered notBefore fails
+- [x] Signature verification with tampered notAfter fails
 
 ### 3.4 Auto-Deposit Logic
 
@@ -617,16 +617,17 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 77
+**Completed**: 84
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
 - Section 3.1 - Valid Registration (13 tests including ERC-6492)
 - Section 3.2 - Edge Cases & Failures (13 tests)
+- Section 3.3 - EIP712 Signature Verification (7 tests)
 - Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 123+
+**Not Started**: 116+
 
 ### Recent Updates
 - ✅ Implemented nonce-based replay protection for deposit signatures

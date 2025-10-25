@@ -909,4 +909,323 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       // For now, we verify the modifier is in place by checking successful execution.
     });
   });
+
+  describe("3.3 EIP712 Signature Verification", function () {
+    it("should verify signature includes all required fields", async function () {
+      const { zeroLC, user1, agent1, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: totalAmount,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      // Sign with all fields present
+      const domain = {
+        name: "ZeroLC",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await zeroLC.getAddress(),
+      };
+
+      const types = {
+        AuthorizationScope: [
+          { name: "user", type: "address" },
+          { name: "totalAmount", type: "uint48" },
+          { name: "disputeWindow", type: "uint48" },
+          { name: "agent", type: "address" },
+          { name: "notBefore", type: "uint48" },
+          { name: "notAfter", type: "uint48" },
+        ],
+      };
+
+      const signature = await user1.signTypedData(domain, types, scope);
+
+      // Registration should succeed with all fields
+      await expect(
+        zeroLC.registerAuthorizationScope(scope, signature)
+      ).to.not.be.reverted;
+    });
+
+    it("should fail verification with tampered user address", async function () {
+      const { zeroLC, user1, user2, agent1, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+      await depositForUser(user2, totalAmount);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: totalAmount,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const domain = {
+        name: "ZeroLC",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await zeroLC.getAddress(),
+      };
+
+      const types = {
+        AuthorizationScope: [
+          { name: "user", type: "address" },
+          { name: "totalAmount", type: "uint48" },
+          { name: "disputeWindow", type: "uint48" },
+          { name: "agent", type: "address" },
+          { name: "notBefore", type: "uint48" },
+          { name: "notAfter", type: "uint48" },
+        ],
+      };
+
+      // Sign the scope properly
+      const signature = await user1.signTypedData(domain, types, scope);
+
+      // Tamper with the user address
+      const tamperedScope = { ...scope, user: user2.address };
+
+      // Should fail because signature was for user1, not user2
+      await expect(
+        zeroLC.registerAuthorizationScope(tamperedScope, signature)
+      ).to.be.revertedWith("Invalid scope signature");
+    });
+
+    it("should fail verification with tampered totalAmount", async function () {
+      const { zeroLC, user1, agent1, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount * 2n);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: totalAmount,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const domain = {
+        name: "ZeroLC",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await zeroLC.getAddress(),
+      };
+
+      const types = {
+        AuthorizationScope: [
+          { name: "user", type: "address" },
+          { name: "totalAmount", type: "uint48" },
+          { name: "disputeWindow", type: "uint48" },
+          { name: "agent", type: "address" },
+          { name: "notBefore", type: "uint48" },
+          { name: "notAfter", type: "uint48" },
+        ],
+      };
+
+      const signature = await user1.signTypedData(domain, types, scope);
+
+      // Tamper with totalAmount
+      const tamperedScope = { ...scope, totalAmount: totalAmount + 1n };
+
+      await expect(
+        zeroLC.registerAuthorizationScope(tamperedScope, signature)
+      ).to.be.revertedWith("Invalid scope signature");
+    });
+
+    it("should fail verification with tampered disputeWindow", async function () {
+      const { zeroLC, user1, agent1, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: totalAmount,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const domain = {
+        name: "ZeroLC",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await zeroLC.getAddress(),
+      };
+
+      const types = {
+        AuthorizationScope: [
+          { name: "user", type: "address" },
+          { name: "totalAmount", type: "uint48" },
+          { name: "disputeWindow", type: "uint48" },
+          { name: "agent", type: "address" },
+          { name: "notBefore", type: "uint48" },
+          { name: "notAfter", type: "uint48" },
+        ],
+      };
+
+      const signature = await user1.signTypedData(domain, types, scope);
+
+      // Tamper with disputeWindow
+      const tamperedScope = { ...scope, disputeWindow: 7200 };
+
+      await expect(
+        zeroLC.registerAuthorizationScope(tamperedScope, signature)
+      ).to.be.revertedWith("Invalid scope signature");
+    });
+
+    it("should fail verification with tampered agent", async function () {
+      const { zeroLC, user1, agent1, agent2, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: totalAmount,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const domain = {
+        name: "ZeroLC",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await zeroLC.getAddress(),
+      };
+
+      const types = {
+        AuthorizationScope: [
+          { name: "user", type: "address" },
+          { name: "totalAmount", type: "uint48" },
+          { name: "disputeWindow", type: "uint48" },
+          { name: "agent", type: "address" },
+          { name: "notBefore", type: "uint48" },
+          { name: "notAfter", type: "uint48" },
+        ],
+      };
+
+      const signature = await user1.signTypedData(domain, types, scope);
+
+      // Tamper with agent
+      const tamperedScope = { ...scope, agent: agent2.address };
+
+      await expect(
+        zeroLC.registerAuthorizationScope(tamperedScope, signature)
+      ).to.be.revertedWith("Invalid scope signature");
+    });
+
+    it("should fail verification with tampered notBefore", async function () {
+      const { zeroLC, user1, agent1, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: totalAmount,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const domain = {
+        name: "ZeroLC",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await zeroLC.getAddress(),
+      };
+
+      const types = {
+        AuthorizationScope: [
+          { name: "user", type: "address" },
+          { name: "totalAmount", type: "uint48" },
+          { name: "disputeWindow", type: "uint48" },
+          { name: "agent", type: "address" },
+          { name: "notBefore", type: "uint48" },
+          { name: "notAfter", type: "uint48" },
+        ],
+      };
+
+      const signature = await user1.signTypedData(domain, types, scope);
+
+      // Tamper with notBefore
+      const tamperedScope = { ...scope, notBefore: currentTime - 3600 };
+
+      await expect(
+        zeroLC.registerAuthorizationScope(tamperedScope, signature)
+      ).to.be.revertedWith("Invalid scope signature");
+    });
+
+    it("should fail verification with tampered notAfter", async function () {
+      const { zeroLC, user1, agent1, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: totalAmount,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const domain = {
+        name: "ZeroLC",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await zeroLC.getAddress(),
+      };
+
+      const types = {
+        AuthorizationScope: [
+          { name: "user", type: "address" },
+          { name: "totalAmount", type: "uint48" },
+          { name: "disputeWindow", type: "uint48" },
+          { name: "agent", type: "address" },
+          { name: "notBefore", type: "uint48" },
+          { name: "notAfter", type: "uint48" },
+        ],
+      };
+
+      const signature = await user1.signTypedData(domain, types, scope);
+
+      // Tamper with notAfter
+      const tamperedScope = { ...scope, notAfter: currentTime + 172800 };
+
+      await expect(
+        zeroLC.registerAuthorizationScope(tamperedScope, signature)
+      ).to.be.revertedWith("Invalid scope signature");
+    });
+  });
 });
