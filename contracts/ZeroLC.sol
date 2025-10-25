@@ -369,6 +369,7 @@ contract ZeroLC is
         require(disputes.length > 0, "Invalid batch length");
         for (uint256 i = 0; i < disputes.length; i++) {
             Dispute calldata d = disputes[i];
+            require(d.amountToClawback > 0, "Invalid amount to clawback");
             ChargeBatch calldata chargeBatch = d.chargeBatch;
             bytes32 scopeHash = verifyChargeBatchSignature(chargeBatch);
             require(

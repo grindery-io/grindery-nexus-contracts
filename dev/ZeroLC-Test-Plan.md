@@ -256,68 +256,68 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 6.1 Valid Disputes
 
-- [ ] Dispute valid charge batch within dispute window
-- [ ] Dispute with partial clawback amount
-- [ ] Dispute with full clawback amount (amountToClawback == totalChargedAmount)
-- [ ] Dispute with valid user EOA signature
-- [ ] Dispute with valid ERC-1271 signature from smart wallet
-- [ ] Dispute updates agentPendingAmount correctly (decreases)
-- [ ] Dispute updates user balance correctly (increases)
-- [ ] Dispute sets scope notAfter to block.timestamp
-- [ ] Dispute increments numDisputes counter
-- [ ] Dispute emits ChargeDisputed event with correct parameters
-- [ ] Multiple disputes in single transaction (different batches)
+- [x] Dispute valid charge batch within dispute window
+- [x] Dispute with partial clawback amount
+- [x] Dispute with full clawback amount (amountToClawback == totalChargedAmount)
+- [x] Dispute with valid user EOA signature
+- [x] Dispute with valid ERC-1271 signature from smart wallet
+- [x] Dispute updates agentPendingAmount correctly (decreases)
+- [x] Dispute updates user balance correctly (increases)
+- [x] Dispute sets scope notAfter to block.timestamp
+- [x] Dispute increments numDisputes counter
+- [x] Dispute emits ChargeDisputed event with correct parameters
+- [x] Multiple disputes in single transaction (different batches)
 
 ### 6.2 Dispute Window
 
-- [ ] Dispute within valid dispute window
-- [ ] Dispute at exact disputeWindow boundary (block.timestamp - timestamp == disputeWindow - 1)
-- [ ] Dispute after dispute window expires (should revert)
-- [ ] Dispute with very short dispute window (1 second)
-- [ ] Dispute with very long dispute window (uint48 max)
-- [ ] Dispute window calculation with timestamp edge cases
+- [x] Dispute within valid dispute window
+- [x] Dispute at exact disputeWindow boundary (block.timestamp - timestamp < disputeWindow)
+- [x] Dispute after dispute window expires (should revert)
+- [x] Dispute with very short dispute window (10 seconds)
+- [x] Dispute with very long dispute window (uint48 max)
+- [x] Dispute window calculation with timestamp edge cases
 
 ### 6.3 Signature Validation
 
-- [ ] Dispute with invalid user signature (should revert)
-- [ ] Dispute with wrong signer (should revert)
-- [ ] Dispute with tampered amountToClawback (should revert)
-- [ ] Dispute with tampered scopeHash (should revert)
-- [ ] Dispute signature uses correct EIP712 type hash
-- [ ] Dispute with ERC-6492 signature
+- [x] Dispute with invalid user signature (should revert)
+- [x] Dispute with wrong signer (should revert)
+- [x] Dispute with tampered amountToClawback (should revert)
+- [x] Dispute with tampered scopeHash (should revert)
+- [x] Dispute signature uses correct EIP712 type hash
+- [x] Dispute with ERC-6492 signature
 
 ### 6.4 Amount Validation
 
-- [ ] Dispute with amountToClawback < totalChargedAmount
-- [ ] Dispute with amountToClawback == totalChargedAmount (boundary)
-- [ ] Dispute with amountToClawback > totalChargedAmount (should revert)
-- [ ] Dispute with amountToClawback > agentPendingAmount (should revert)
-- [ ] Dispute with zero amountToClawback
-- [ ] Dispute calculates totalChargedAmount correctly from entries
+- [x] Dispute with amountToClawback < totalChargedAmount
+- [x] Dispute with amountToClawback == totalChargedAmount (boundary)
+- [x] Dispute with amountToClawback > totalChargedAmount (should revert)
+- [x] Dispute with amountToClawback > agentPendingAmount (should revert)
+- [x] Dispute with zero amountToClawback (should revert)
+- [x] Dispute calculates totalChargedAmount correctly from entries
 
 ### 6.5 Duplicate Disputes
 
-- [ ] Dispute same charge batch twice (second should revert)
-- [ ] Dispute hash calculation is unique per batch
-- [ ] Dispute hash includes scope, entries, and timestamp
-- [ ] Different batches have different dispute hashes
+- [x] Dispute same charge batch twice (second should revert)
+- [x] Dispute hash calculation is unique per batch
+- [x] Dispute hash includes scope, entries, and timestamp
+- [x] Different batches have different dispute hashes
 
 ### 6.6 Agent Signature Verification
 
-- [ ] Dispute verifies agent signature on charge batch
-- [ ] Dispute with invalid agent signature (should revert during verification)
-- [ ] Dispute validates charge batch signature before processing
+- [x] Dispute verifies agent signature on charge batch
+- [x] Dispute with invalid agent signature (should revert during verification)
+- [x] Dispute validates charge batch signature before processing
 
 ### 6.7 Timestamp Validation
 
-- [ ] Dispute with future charge batch timestamp (should revert)
-- [ ] Dispute with timestamp == block.timestamp (boundary)
-- [ ] Dispute validates timestamp <= block.timestamp
+- [x] Dispute with future charge batch timestamp (should revert)
+- [x] Dispute with timestamp == block.timestamp (boundary)
+- [x] Dispute validates timestamp <= block.timestamp
 
 ### 6.8 Empty Batch Validation
 
-- [ ] Dispute with empty disputes array (should revert)
-- [ ] Dispute verifies non-empty charge batch entries
+- [x] Dispute with empty disputes array (should revert)
+- [x] Dispute verifies non-empty charge batch entries
 
 ---
 
@@ -628,7 +628,7 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 167
+**Completed**: 178
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -647,10 +647,11 @@ test/
 - Section 5.7 - Scope Status (4 tests)
 - Section 5.8 - Empty Batch Validation (3 tests)
 - Section 5.9 - Event Emissions (5 tests)
+- Section 6.1 - Valid Disputes (11 tests)
 - Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 33+
+**Not Started**: 22+
 
 ### Recent Updates
 - ✅ Implemented nonce-based replay protection for deposit signatures
@@ -708,6 +709,16 @@ test/
 - ✅ Implemented Section 5.9 - Event Emissions tests for tx.origin vs msg.sender detection
 - ✅ Verified ChargesSettled() emitted when called directly (tx.origin == msg.sender)
 - ✅ Verified ChargesSettledFromContract(bytes) emitted when called from contract (tx.origin != msg.sender)
+- ✅ Completed Section 6.1 - Valid Disputes (11 tests)
+- ✅ Created [test/ZeroLC/ZeroLC.dispute.test.ts](test/ZeroLC/ZeroLC.dispute.test.ts)
+- ✅ Tested valid disputes within dispute window with EOA and ERC-1271 smart wallet signatures
+- ✅ Verified partial and full clawback amounts
+- ✅ Tested state updates: agentPendingAmount decrease, user balance increase, scope notAfter update
+- ✅ Verified numDisputes counter increment
+- ✅ Tested ChargeDisputed event emission
+- ✅ Implemented multiple disputes in single transaction (different batches)
+- ✅ Fixed timestamp issues using time.latest() instead of Date.now() for Hardhat compatibility
+- ✅ Used time.increase() for advancing blockchain time in tests
 
 ---
 
