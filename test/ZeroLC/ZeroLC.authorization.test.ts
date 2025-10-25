@@ -1228,4 +1228,272 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       ).to.be.revertedWith("Invalid scope signature");
     });
   });
+
+  describe("3.4 Auto-Deposit Logic", function () {
+    it("should auto-deposit when balance < totalAmount and allowance sufficient", async function () {
+      const { zeroLC, gasToken, user1, agent1, createAuthorizationScope } =
+        await loadFixture(deployZeroLCFixture);
+
+      const initialDeposit = 30000n;
+      const totalAmount = 100000n;
+      const amountNeeded = totalAmount - initialDeposit;
+
+      // Deposit only 30% of needed amount
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), initialDeposit);
+      await zeroLC.connect(user1)["deposit(uint256)"](initialDeposit);
+
+      // Verify initial balance
+      const balanceBefore = await zeroLC.balanceOf(user1.address);
+      expect(balanceBefore).to.equal(initialDeposit);
+
+      // Approve full amount for auto-deposit
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(user1, agent1, totalAmount);
+
+      // Should trigger auto-deposit
+      await expect(zeroLC.registerAuthorizationScope(scope, signature))
+        .to.emit(zeroLC, "Deposit")
+        .withArgs(user1.address, amountNeeded);
+
+      // Verify scope was registered successfully
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const scopeState = await zeroLC.authorizationScopes(scopeHash);
+      expect(scopeState.remainingAmount).to.equal(totalAmount);
+    });
+
+    it("should not auto-deposit when balance < totalAmount but allowance insufficient", async function () {
+      const { zeroLC, gasToken, user1, agent1, createAuthorizationScope } =
+        await loadFixture(deployZeroLCFixture);
+
+      const initialDeposit = 30000n;
+      const totalAmount = 100000n;
+      const insufficientAllowance = 50000n; // Not enough to cover the gap
+
+      // Deposit only 30% of needed amount
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), initialDeposit);
+      await zeroLC.connect(user1)["deposit(uint256)"](initialDeposit);
+
+      // Approve insufficient amount (less than totalAmount - initialDeposit)
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), insufficientAllowance);
+
+      const { scope, signature } = await createAuthorizationScope(user1, agent1, totalAmount);
+
+      // Should fail because auto-deposit won't trigger with insufficient allowance
+      await expect(
+        zeroLC.registerAuthorizationScope(scope, signature)
+      ).to.be.revertedWith("Insufficient balance");
+    });
+
+    it("should not auto-deposit when balance < totalAmount but token balance insufficient", async function () {
+      const { zeroLC, gasToken, user1, agent1, createAuthorizationScope, owner } =
+        await loadFixture(deployZeroLCFixture);
+
+      const initialDeposit = 30000n;
+      const totalAmount = 100000n;
+
+      // Deposit only 30% of needed amount
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), initialDeposit);
+      await zeroLC.connect(user1)["deposit(uint256)"](initialDeposit);
+
+      // Transfer away most of user's tokens so they don't have enough for auto-deposit
+      const user1Balance = await gasToken.balanceOf(user1.address);
+      await gasToken.connect(user1).transfer(owner.address, user1Balance - 10000n);
+
+      // Approve full amount (but user doesn't have this much)
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(user1, agent1, totalAmount);
+
+      // Should fail because user doesn't have enough tokens for auto-deposit
+      await expect(
+        zeroLC.registerAuthorizationScope(scope, signature)
+      ).to.be.revertedWith("Insufficient balance");
+    });
+
+    it("should auto-deposit exact amount needed (totalAmount - balance)", async function () {
+      const { zeroLC, gasToken, user1, agent1, createAuthorizationScope } =
+        await loadFixture(deployZeroLCFixture);
+
+      const initialDeposit = 45000n;
+      const totalAmount = 100000n;
+      const expectedAutoDeposit = totalAmount - initialDeposit; // Should be 55000
+
+      // Deposit initial amount
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), initialDeposit);
+      await zeroLC.connect(user1)["deposit(uint256)"](initialDeposit);
+
+      // Approve full amount for auto-deposit
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(user1, agent1, totalAmount);
+
+      // Record gas token balance before
+      const gasTokenBalanceBefore = await gasToken.balanceOf(user1.address);
+
+      // Should trigger auto-deposit of exactly the amount needed
+      await expect(zeroLC.registerAuthorizationScope(scope, signature))
+        .to.emit(zeroLC, "Deposit")
+        .withArgs(user1.address, expectedAutoDeposit);
+
+      // Verify exact amount was transferred
+      const gasTokenBalanceAfter = await gasToken.balanceOf(user1.address);
+      expect(gasTokenBalanceBefore - gasTokenBalanceAfter).to.equal(expectedAutoDeposit);
+
+      // Verify scope has full amount
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const scopeState = await zeroLC.authorizationScopes(scopeHash);
+      expect(scopeState.remainingAmount).to.equal(totalAmount);
+    });
+  });
+
+  describe("3.5 Scope Hash Calculation", function () {
+    it("should return consistent hash for same scope", async function () {
+      const { zeroLC, user1, agent1 } =
+        await loadFixture(deployZeroLCFixture);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: 100000n,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const hash1 = await zeroLC.getScopeHash(scope);
+      const hash2 = await zeroLC.getScopeHash(scope);
+
+      expect(hash1).to.equal(hash2);
+    });
+
+    it("should return different hash for different scopes", async function () {
+      const { zeroLC, user1, agent1, agent2 } =
+        await loadFixture(deployZeroLCFixture);
+
+      const currentTime = await time.latest();
+      const scope1 = {
+        user: user1.address,
+        totalAmount: 100000n,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const scope2 = {
+        user: user1.address,
+        totalAmount: 100000n,
+        disputeWindow: 3600,
+        agent: agent2.address, // Different agent
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const hash1 = await zeroLC.getScopeHash(scope1);
+      const hash2 = await zeroLC.getScopeHash(scope2);
+
+      expect(hash1).to.not.equal(hash2);
+    });
+
+    it("should include domain separator in scope hash", async function () {
+      const { zeroLC, user1, agent1 } =
+        await loadFixture(deployZeroLCFixture);
+
+      const currentTime = await time.latest();
+      const scope = {
+        user: user1.address,
+        totalAmount: 100000n,
+        disputeWindow: 3600,
+        agent: agent1.address,
+        notBefore: currentTime,
+        notAfter: currentTime + 86400,
+      };
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // The hash should be non-zero and 32 bytes
+      expect(scopeHash).to.not.equal(ethers.ZeroHash);
+      expect(scopeHash).to.have.lengthOf(66); // 0x + 64 hex characters
+
+      // Re-compute manually to verify it includes domain separator
+      const domain = await zeroLC.eip712Domain();
+      const domainSeparator = ethers.TypedDataEncoder.hashDomain({
+        name: domain.name,
+        version: domain.version,
+        chainId: domain.chainId,
+        verifyingContract: domain.verifyingContract,
+      });
+
+      const expectedHash = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
+          [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+        )
+      );
+
+      expect(scopeHash).to.equal(expectedHash);
+    });
+
+    it("should uniquely identify scope", async function () {
+      const { zeroLC, user1, user2, agent1 } =
+        await loadFixture(deployZeroLCFixture);
+
+      const currentTime = await time.latest();
+
+      // Create multiple scopes with slight variations
+      const scopes = [
+        {
+          user: user1.address,
+          totalAmount: 100000n,
+          disputeWindow: 3600,
+          agent: agent1.address,
+          notBefore: currentTime,
+          notAfter: currentTime + 86400,
+        },
+        {
+          user: user2.address, // Different user
+          totalAmount: 100000n,
+          disputeWindow: 3600,
+          agent: agent1.address,
+          notBefore: currentTime,
+          notAfter: currentTime + 86400,
+        },
+        {
+          user: user1.address,
+          totalAmount: 200000n, // Different amount
+          disputeWindow: 3600,
+          agent: agent1.address,
+          notBefore: currentTime,
+          notAfter: currentTime + 86400,
+        },
+        {
+          user: user1.address,
+          totalAmount: 100000n,
+          disputeWindow: 7200, // Different dispute window
+          agent: agent1.address,
+          notBefore: currentTime,
+          notAfter: currentTime + 86400,
+        },
+        {
+          user: user1.address,
+          totalAmount: 100000n,
+          disputeWindow: 3600,
+          agent: agent1.address,
+          notBefore: currentTime,
+          notAfter: currentTime + 172800, // Different notAfter
+        },
+      ];
+
+      const hashes = [];
+      for (const scope of scopes) {
+        hashes.push(await zeroLC.getScopeHash(scope));
+      }
+
+      // All hashes should be unique
+      const uniqueHashes = new Set(hashes);
+      expect(uniqueHashes.size).to.equal(scopes.length);
+    });
+  });
 });

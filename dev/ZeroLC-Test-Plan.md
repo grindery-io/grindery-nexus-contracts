@@ -126,17 +126,17 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 3.4 Auto-Deposit Logic
 
-- [ ] Auto-deposit when balance < totalAmount and allowance sufficient
-- [ ] No auto-deposit when balance < totalAmount but allowance insufficient
-- [ ] No auto-deposit when balance < totalAmount but token balance insufficient
-- [ ] Auto-deposit deposits exact amount needed (totalAmount - balance)
+- [x] Auto-deposit when balance < totalAmount and allowance sufficient
+- [x] No auto-deposit when balance < totalAmount but allowance insufficient
+- [x] No auto-deposit when balance < totalAmount but token balance insufficient
+- [x] Auto-deposit deposits exact amount needed (totalAmount - balance)
 
 ### 3.5 Scope Hash Calculation
 
-- [ ] getScopeHash returns consistent hash for same scope
-- [ ] getScopeHash returns different hash for different scopes
-- [ ] Scope hash includes domain separator
-- [ ] Scope hash uniquely identifies scope
+- [x] getScopeHash returns consistent hash for same scope
+- [x] getScopeHash returns different hash for different scopes
+- [x] Scope hash includes domain separator
+- [x] Scope hash uniquely identifies scope
 
 ---
 
@@ -617,17 +617,19 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 84
+**Completed**: 92
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
 - Section 3.1 - Valid Registration (13 tests including ERC-6492)
 - Section 3.2 - Edge Cases & Failures (13 tests)
 - Section 3.3 - EIP712 Signature Verification (7 tests)
+- Section 3.4 - Auto-Deposit Logic (4 tests)
+- Section 3.5 - Scope Hash Calculation (4 tests)
 - Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 116+
+**Not Started**: 108+
 
 ### Recent Updates
 - ✅ Implemented nonce-based replay protection for deposit signatures
@@ -654,8 +656,17 @@ test/
 - ✅ Tested validation for zero values (totalAmount, disputeWindow, agent address)
 - ✅ Boundary condition tests for notBefore/notAfter timestamps
 - ✅ Verified reentrancy protection on registration
+- ✅ Completed Section 3.4 - Auto-Deposit Logic (4 tests)
+- ✅ Verified auto-deposit triggers when balance insufficient but allowance exists
+- ✅ Tested auto-deposit deposits exact amount needed (totalAmount - balance)
+- ✅ Verified auto-deposit failures when allowance or token balance insufficient
+- ✅ Completed Section 3.5 - Scope Hash Calculation (4 tests)
+- ✅ Verified getScopeHash returns consistent hash for same scope
+- ✅ Verified different scopes produce different hashes
+- ✅ Confirmed scope hash includes domain separator
+- ✅ Verified scope hash uniquely identifies each scope
 
 ---
 
-**Last Updated**: 2025-10-24
+**Last Updated**: 2025-10-25
 **Contract Version**: ZeroLC.sol (with nonce-based replay protection)
