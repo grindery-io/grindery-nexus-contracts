@@ -28,7 +28,9 @@ describe("ZeroLC - Balance View Functions", function () {
     await zeroLCImpl.waitForDeployment();
 
     // Deploy a proxy pointing to the implementation
-    const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+    const ERC1967ProxyFactory = await ethers.getContractFactory(
+      "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy"
+    );
     const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
     const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
     await proxy.waitForDeployment();
@@ -98,7 +100,7 @@ describe("ZeroLC - Balance View Functions", function () {
       const currentTime = await time.latest();
       const batchTimestamp = timestamp ?? currentTime;
 
-      const chargeEntries = entries.map(e => ({
+      const chargeEntries = entries.map((e) => ({
         amount: e.amount,
         nonce: e.nonce,
         notAfter: e.notAfter,
@@ -109,19 +111,16 @@ describe("ZeroLC - Balance View Functions", function () {
       let batchPartHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
       if (chargeEntries.length > 1) {
         const entriesWithoutLast = chargeEntries.slice(0, -1);
-        const encodedEntries = entriesWithoutLast.map(e => [e.amount, e.nonce, e.notAfter]);
+        const encodedEntries = entriesWithoutLast.map((e) => [e.amount, e.nonce, e.notAfter]);
         batchPartHash = ethers.keccak256(
-          ethers.AbiCoder.defaultAbiCoder().encode(
-            ["tuple(uint48,uint48,uint48)[]"],
-            [encodedEntries]
-          )
+          ethers.AbiCoder.defaultAbiCoder().encode(["tuple(uint48,uint24,uint48)[]"], [encodedEntries])
         );
       }
 
       const lastEntry = chargeEntries[chargeEntries.length - 1];
 
       const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [batchPartHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
       );
 
@@ -218,7 +217,8 @@ describe("ZeroLC - Balance View Functions", function () {
     });
 
     it("should return correct balance after partial settlements", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
 
       const depositAmount = 500n;
       await depositForUser(user1, depositAmount);
@@ -228,7 +228,7 @@ describe("ZeroLC - Balance View Functions", function () {
 
       // Settle some charges
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 50n, nonce: 1, notAfter: currentTime + 7200 }
+        { amount: 50n, nonce: 1, notAfter: currentTime + 7200 },
       ]);
 
       await zeroLC.settleCharges([chargeBatch]);
@@ -256,7 +256,8 @@ describe("ZeroLC - Balance View Functions", function () {
     });
 
     it("should return correct balance after disputes", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
 
       const depositAmount = 500n;
       await depositForUser(user1, depositAmount);
@@ -266,7 +267,7 @@ describe("ZeroLC - Balance View Functions", function () {
 
       // Settle some charges
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 100n, nonce: 1, notAfter: currentTime + 7200 }
+        { amount: 100n, nonce: 1, notAfter: currentTime + 7200 },
       ]);
 
       await zeroLC.settleCharges([chargeBatch]);

@@ -84,7 +84,7 @@ struct AuthorizationScopeState {
 
 struct ChargeEntry {
     uint48 amount;
-    uint48 nonce; // TODO: Change to uint24 to match AuthorizationScopeState.nonce, update all signature-related code, and remove type casting
+    uint24 nonce;
     uint48 notAfter;
 }
 
@@ -689,16 +689,15 @@ contract ZeroLC is
             // Process each entry in the batch
             for (uint256 j = 0; j < batch.entries.length; j++) {
                 ChargeEntry memory entry = batch.entries[j];
-                uint24 entryNonce = uint24(entry.nonce);
 
                 // Verify nonce continuity - must be sequential with no gaps
-                require(entryNonce == expectedNonce, NonContinuousNonceSequence());
+                require(entry.nonce == expectedNonce, NonContinuousNonceSequence());
 
                 totalWithdrawableCharges += entry.amount;
 
                 expectedNonce++;
-                if (entryNonce > highestNonce) {
-                    highestNonce = entryNonce;
+                if (entry.nonce > highestNonce) {
+                    highestNonce = entry.nonce;
                 }
             }
         }

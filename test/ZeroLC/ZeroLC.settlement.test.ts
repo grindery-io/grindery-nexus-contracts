@@ -28,7 +28,9 @@ describe("ZeroLC - Charge Settlement", function () {
     await zeroLCImpl.waitForDeployment();
 
     // Deploy a proxy pointing to the implementation
-    const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+    const ERC1967ProxyFactory = await ethers.getContractFactory(
+      "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy"
+    );
     const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
     const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
     await proxy.waitForDeployment();
@@ -125,7 +127,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
       const batchTimestamp = timestamp ?? currentTime;
 
-      const chargeEntries = entries.map(e => ({
+      const chargeEntries = entries.map((e) => ({
         amount: e.amount,
         nonce: e.nonce,
         notAfter: e.notAfter,
@@ -140,12 +142,9 @@ describe("ZeroLC - Charge Settlement", function () {
         const entriesWithoutLast = chargeEntries.slice(0, -1);
         // Contract uses: keccak256(abi.encode(chargeBatch.entries[0:numCharges - 1]))
         // which encodes the array slice
-        const encodedEntries = entriesWithoutLast.map(e => [e.amount, e.nonce, e.notAfter]);
+        const encodedEntries = entriesWithoutLast.map((e) => [e.amount, e.nonce, e.notAfter]);
         batchPartHash = ethers.keccak256(
-          ethers.AbiCoder.defaultAbiCoder().encode(
-            ["tuple(uint48,uint48,uint48)[]"],
-            [encodedEntries]
-          )
+          ethers.AbiCoder.defaultAbiCoder().encode(["tuple(uint48,uint24,uint48)[]"], [encodedEntries])
         );
       }
 
@@ -154,7 +153,7 @@ describe("ZeroLC - Charge Settlement", function () {
       // Encode the verifier struct components
       // Contract uses: abi.encode(ChargeBatchVerifier) which encodes the struct fields in order
       const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [batchPartHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
       );
 
@@ -201,11 +200,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
 
       // Verify state updates
       const scopeHash = await zeroLC.getScopeHash(scope);
@@ -230,11 +228,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const chargeBatch = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
         { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 },
-        { amount: 1500n, nonce: 3, notAfter: currentTime + 3600 }
+        { amount: 1500n, nonce: 3, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
 
       // Verify state updates
       const scopeHash = await zeroLC.getScopeHash(scope);
@@ -255,19 +252,24 @@ describe("ZeroLC - Charge Settlement", function () {
       const scope = await registerScope(user1, agent1, totalAmount);
       const currentTime = await time.latest();
 
-      const chargeBatch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const chargeBatch1 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        currentTime
+      );
 
       // Second batch must have later timestamp
       await time.increase(10);
       const laterTime = await time.latest();
-      const chargeBatch2 = await createChargeBatch(scope, agent1, [
-        { amount: 2000n, nonce: 2, notAfter: laterTime + 3600 }
-      ], laterTime);
+      const chargeBatch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 2000n, nonce: 2, notAfter: laterTime + 3600 }],
+        laterTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch1, chargeBatch2]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch1, chargeBatch2])).to.not.be.reverted;
 
       // Verify final state
       const scopeHash = await zeroLC.getScopeHash(scope);
@@ -290,16 +292,19 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // First settlement
       const batch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
       await zeroLC.settleCharges([batch1]);
 
       // Second settlement with next nonce
       await time.increase(10);
       const laterTime = await time.latest();
-      const batch2 = await createChargeBatch(scope, agent1, [
-        { amount: 2000n, nonce: 2, notAfter: laterTime + 3600 }
-      ], laterTime);
+      const batch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 2000n, nonce: 2, notAfter: laterTime + 3600 }],
+        laterTime
+      );
       await zeroLC.settleCharges([batch2]);
 
       const scopeHash = await zeroLC.getScopeHash(scope);
@@ -319,7 +324,7 @@ describe("ZeroLC - Charge Settlement", function () {
 
       const chargeAmount = 15000n;
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: chargeAmount, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: chargeAmount, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       await zeroLC.settleCharges([chargeBatch]);
@@ -341,7 +346,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 10000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 10000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       await zeroLC.settleCharges([chargeBatch]);
@@ -354,9 +359,12 @@ describe("ZeroLC - Charge Settlement", function () {
       // Settle more charges
       await time.increase(10);
       const laterTime = await time.latest();
-      const chargeBatch2 = await createChargeBatch(scope, agent1, [
-        { amount: 5000n, nonce: 2, notAfter: laterTime + 3600 }
-      ], laterTime);
+      const chargeBatch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 5000n, nonce: 2, notAfter: laterTime + 3600 }],
+        laterTime
+      );
 
       await zeroLC.settleCharges([chargeBatch2]);
 
@@ -374,9 +382,12 @@ describe("ZeroLC - Charge Settlement", function () {
       const scope = await registerScope(user1, agent1, totalAmount);
       const currentTime = await time.latest();
 
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        currentTime
+      );
 
       await zeroLC.settleCharges([chargeBatch]);
 
@@ -401,7 +412,7 @@ describe("ZeroLC - Charge Settlement", function () {
         { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 },
         { amount: 3000n, nonce: 3, notAfter: currentTime + 3600 },
         { amount: 4000n, nonce: 4, notAfter: currentTime + 3600 },
-        { amount: 5000n, nonce: 5, notAfter: currentTime + 3600 }
+        { amount: 5000n, nonce: 5, notAfter: currentTime + 3600 },
       ]);
 
       await zeroLC.settleCharges([chargeBatch]);
@@ -423,7 +434,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       // When called directly (tx.origin == msg.sender), should emit ChargesSettled event without parameters
@@ -443,7 +454,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       await zeroLC.settleCharges([chargeBatch]);
@@ -468,11 +479,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should revert with invalid agent signature", async function () {
@@ -486,12 +496,12 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       // Create batch but sign with wrong signer
-      const chargeBatch = await createChargeBatch(scope, user2, [ // user2 instead of agent1
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+      const chargeBatch = await createChargeBatch(scope, user2, [
+        // user2 instead of agent1
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should revert with wrong agent signing", async function () {
@@ -506,11 +516,10 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Create batch signed by agent2 instead of agent1
       const chargeBatch = await createChargeBatch(scope, agent2, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should settle with single entry (batchPartHash == 0x00)", async function () {
@@ -524,12 +533,11 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       // Single entry should have batchPartHash of all zeros
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should settle with multiple entries (batchPartHash verified)", async function () {
@@ -545,12 +553,11 @@ describe("ZeroLC - Charge Settlement", function () {
       const chargeBatch = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
         { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 },
-        { amount: 3000n, nonce: 3, notAfter: currentTime + 3600 }
+        { amount: 3000n, nonce: 3, notAfter: currentTime + 3600 },
       ]);
 
       // Multiple entries should verify batchPartHash correctly
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should revert with tampered batchPartHash", async function () {
@@ -565,14 +572,13 @@ describe("ZeroLC - Charge Settlement", function () {
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
-        { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 }
+        { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 },
       ]);
 
       // Tamper with the first entry after signing
       chargeBatch.entries[0].amount = 9999n;
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should revert with tampered lastEntry", async function () {
@@ -586,14 +592,13 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       // Tamper with the last entry amount after signing
       chargeBatch.entries[0].amount = 9999n;
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should revert with tampered scopeHash", async function () {
@@ -610,14 +615,13 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope1, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       // Tamper with scope by substituting user
       chargeBatch.scope = scope2;
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should use correct verifier struct encoding", async function () {
@@ -633,12 +637,11 @@ describe("ZeroLC - Charge Settlement", function () {
       // Test that the encoding matches what the contract expects
       const chargeBatch = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
-        { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 }
+        { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 },
       ]);
 
       // If encoding is correct, settlement should succeed
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
   });
 
@@ -655,12 +658,14 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Create batch with timestamp 30 seconds in the past (well within 60-second window)
       const pastTime = currentTime - 30;
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], pastTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        pastTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should revert with timestamp == block.timestamp - 60 (boundary)", async function () {
@@ -675,12 +680,17 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Create batch with timestamp exactly 60 seconds in the past
       const pastTime = currentTime - 60;
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], pastTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        pastTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "BatchTimestampOutOfRange");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(
+        zeroLC,
+        "BatchTimestampOutOfRange"
+      );
     });
 
     it("should settle with timestamp within 59 seconds window (boundary)", async function () {
@@ -697,12 +707,14 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Create batch with timestamp 55 seconds in the past (safely within the 60-second window)
       const pastTime = currentTime - 55;
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], pastTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        pastTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should settle with timestamp == block.timestamp (boundary)", async function () {
@@ -715,12 +727,14 @@ describe("ZeroLC - Charge Settlement", function () {
       const scope = await registerScope(user1, agent1, totalAmount);
       const currentTime = await time.latest();
 
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        currentTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should revert with timestamp < block.timestamp - 60", async function () {
@@ -735,12 +749,17 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Create batch with timestamp 120 seconds in the past
       const pastTime = currentTime - 120;
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], pastTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        pastTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "BatchTimestampOutOfRange");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(
+        zeroLC,
+        "BatchTimestampOutOfRange"
+      );
     });
 
     it("should revert with timestamp > block.timestamp", async function () {
@@ -755,12 +774,17 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Create batch with timestamp in the future
       const futureTime = currentTime + 10;
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], futureTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        futureTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "BatchTimestampOutOfRange");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(
+        zeroLC,
+        "BatchTimestampOutOfRange"
+      );
     });
 
     it("should revert with timestamp <= lastChargeTimestamp", async function () {
@@ -774,18 +798,23 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       // First settlement
-      const batch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const batch1 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        currentTime
+      );
       await zeroLC.settleCharges([batch1]);
 
       // Try to settle with same timestamp
-      const batch2 = await createChargeBatch(scope, agent1, [
-        { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const batch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 2000n, nonce: 2, notAfter: currentTime + 3600 }],
+        currentTime
+      );
 
-      await expect(zeroLC.settleCharges([batch2]))
-        .to.be.revertedWithCustomError(zeroLC, "BatchTimestampNotIncreasing");
+      await expect(zeroLC.settleCharges([batch2])).to.be.revertedWithCustomError(zeroLC, "BatchTimestampNotIncreasing");
     });
 
     it("should settle with timestamp == lastChargeTimestamp + 1 (boundary)", async function () {
@@ -799,9 +828,12 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       // First settlement
-      const batch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const batch1 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        currentTime
+      );
       await zeroLC.settleCharges([batch1]);
 
       // Advance time by 1 second
@@ -809,12 +841,14 @@ describe("ZeroLC - Charge Settlement", function () {
       const nextTime = await time.latest();
 
       // Settle with timestamp exactly 1 second after last charge
-      const batch2 = await createChargeBatch(scope, agent1, [
-        { amount: 2000n, nonce: 2, notAfter: nextTime + 3600 }
-      ], nextTime);
+      const batch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 2000n, nonce: 2, notAfter: nextTime + 3600 }],
+        nextTime
+      );
 
-      await expect(zeroLC.settleCharges([batch2]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([batch2])).to.not.be.reverted;
     });
 
     it("should settle multiple batches with increasing timestamps", async function () {
@@ -828,25 +862,34 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       // First batch
-      const batch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const batch1 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }],
+        currentTime
+      );
       await zeroLC.settleCharges([batch1]);
 
       // Second batch with later timestamp
       await time.increase(5);
       const time2 = await time.latest();
-      const batch2 = await createChargeBatch(scope, agent1, [
-        { amount: 2000n, nonce: 2, notAfter: time2 + 3600 }
-      ], time2);
+      const batch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 2000n, nonce: 2, notAfter: time2 + 3600 }],
+        time2
+      );
       await zeroLC.settleCharges([batch2]);
 
       // Third batch with even later timestamp
       await time.increase(5);
       const time3 = await time.latest();
-      const batch3 = await createChargeBatch(scope, agent1, [
-        { amount: 3000n, nonce: 3, notAfter: time3 + 3600 }
-      ], time3);
+      const batch3 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 3000n, nonce: 3, notAfter: time3 + 3600 }],
+        time3
+      );
       await zeroLC.settleCharges([batch3]);
 
       const scopeHash = await zeroLC.getScopeHash(scope);
@@ -869,11 +912,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const chargeBatch = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
         { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 },
-        { amount: 3000n, nonce: 3, notAfter: currentTime + 3600 }
+        { amount: 3000n, nonce: 3, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should revert with wrong nonce", async function () {
@@ -888,11 +930,10 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Start with nonce 2 instead of 1
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 2, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 2, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
     });
 
     it("should revert with skipped nonce", async function () {
@@ -908,11 +949,10 @@ describe("ZeroLC - Charge Settlement", function () {
       // Skip from nonce 1 to 3
       const chargeBatch = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
-        { amount: 2000n, nonce: 3, notAfter: currentTime + 3600 } // Skipped 2
+        { amount: 2000n, nonce: 3, notAfter: currentTime + 3600 }, // Skipped 2
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
     });
 
     it("should revert with repeated nonce", async function () {
@@ -927,19 +967,21 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // First settlement with nonce 1
       const batch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
       await zeroLC.settleCharges([batch1]);
 
       // Try to settle again with nonce 1
       await time.increase(5);
       const laterTime = await time.latest();
-      const batch2 = await createChargeBatch(scope, agent1, [
-        { amount: 2000n, nonce: 1, notAfter: laterTime + 3600 }
-      ], laterTime);
+      const batch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 2000n, nonce: 1, notAfter: laterTime + 3600 }],
+        laterTime
+      );
 
-      await expect(zeroLC.settleCharges([batch2]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
+      await expect(zeroLC.settleCharges([batch2])).to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
     });
 
     it("should settle multiple batches incrementing nonces correctly", async function () {
@@ -956,18 +998,23 @@ describe("ZeroLC - Charge Settlement", function () {
       const batch1 = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
         { amount: 1000n, nonce: 2, notAfter: currentTime + 3600 },
-        { amount: 1000n, nonce: 3, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 3, notAfter: currentTime + 3600 },
       ]);
       await zeroLC.settleCharges([batch1]);
 
       // Second batch: nonces 4-6
       await time.increase(5);
       const time2 = await time.latest();
-      const batch2 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 4, notAfter: time2 + 3600 },
-        { amount: 1000n, nonce: 5, notAfter: time2 + 3600 },
-        { amount: 1000n, nonce: 6, notAfter: time2 + 3600 }
-      ], time2);
+      const batch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [
+          { amount: 1000n, nonce: 4, notAfter: time2 + 3600 },
+          { amount: 1000n, nonce: 5, notAfter: time2 + 3600 },
+          { amount: 1000n, nonce: 6, notAfter: time2 + 3600 },
+        ],
+        time2
+      );
       await zeroLC.settleCharges([batch2]);
 
       const scopeHash = await zeroLC.getScopeHash(scope);
@@ -987,24 +1034,30 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Settlement 1
       const batch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
       await zeroLC.settleCharges([batch1]);
 
       // Settlement 2
       await time.increase(5);
       currentTime = await time.latest();
-      const batch2 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 2, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const batch2 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 2, notAfter: currentTime + 3600 }],
+        currentTime
+      );
       await zeroLC.settleCharges([batch2]);
 
       // Settlement 3
       await time.increase(5);
       currentTime = await time.latest();
-      const batch3 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 3, notAfter: currentTime + 3600 }
-      ], currentTime);
+      const batch3 = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 3, notAfter: currentTime + 3600 }],
+        currentTime
+      );
       await zeroLC.settleCharges([batch3]);
 
       const scopeHash = await zeroLC.getScopeHash(scope);
@@ -1013,8 +1066,7 @@ describe("ZeroLC - Charge Settlement", function () {
     });
 
     it("should have nonce start at 1 for new scope", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope } =
-        await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
 
       const totalAmount = 100000n;
       await depositForUser(user1, totalAmount);
@@ -1039,11 +1091,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 50000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 50000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
 
       const scopeHash = await zeroLC.getScopeHash(scope);
       const state = await zeroLC.authorizationScopes(scopeHash);
@@ -1061,11 +1112,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 100000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 100000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
 
       const scopeHash = await zeroLC.getScopeHash(scope);
       const state = await zeroLC.authorizationScopes(scopeHash);
@@ -1084,11 +1134,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 100001n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 100001n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InsufficientBalance");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InsufficientBalance");
     });
 
     it("should revert with zero amount entries", async function () {
@@ -1102,11 +1151,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 0n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 0n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidChargeAmount");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidChargeAmount");
     });
 
     it("should settle with uint48 max amount (overflow check)", async function () {
@@ -1121,11 +1169,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: maxUint48, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: maxUint48, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should ensure all entries have amount > 0", async function () {
@@ -1140,11 +1187,10 @@ describe("ZeroLC - Charge Settlement", function () {
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
-        { amount: 0n, nonce: 2, notAfter: currentTime + 3600 } // Zero amount
+        { amount: 0n, nonce: 2, notAfter: currentTime + 3600 }, // Zero amount
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidChargeAmount");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "InvalidChargeAmount");
     });
   });
 
@@ -1160,11 +1206,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 } // Expires 1 hour from now
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }, // Expires 1 hour from now
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should settle with entry.notAfter == block.timestamp + 1 (boundary, valid)", async function () {
@@ -1179,13 +1224,17 @@ describe("ZeroLC - Charge Settlement", function () {
       // Get current time right before creating the batch
       let currentTime = await time.latest();
 
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 2 } // notAfter will be block.timestamp + 1 when settled
-      ], currentTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [
+          { amount: 1000n, nonce: 1, notAfter: currentTime + 2 }, // notAfter will be block.timestamp + 1 when settled
+        ],
+        currentTime
+      );
 
       // notAfter is EXCLUSIVE, so entry.notAfter == block.timestamp + 1 is still valid
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should revert with entry.notAfter == block.timestamp (boundary, expired)", async function () {
@@ -1200,13 +1249,17 @@ describe("ZeroLC - Charge Settlement", function () {
       // Get current time right before creating the batch
       let currentTime = await time.latest();
 
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 1 } // notAfter will equal block.timestamp when settled
-      ], currentTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [
+          { amount: 1000n, nonce: 1, notAfter: currentTime + 1 }, // notAfter will equal block.timestamp when settled
+        ],
+        currentTime
+      );
 
       // notAfter is EXCLUSIVE, so entry.notAfter == block.timestamp means expired
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "ChargeEntryExpired");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "ChargeEntryExpired");
     });
 
     it("should revert with entry.notAfter < block.timestamp (expired)", async function () {
@@ -1220,11 +1273,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime - 1 } // Already expired
+        { amount: 1000n, nonce: 1, notAfter: currentTime - 1 }, // Already expired
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "ChargeEntryExpired");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(zeroLC, "ChargeEntryExpired");
     });
 
     it("should settle multiple entries with different notAfter values", async function () {
@@ -1240,11 +1292,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const chargeBatch = await createChargeBatch(scope, agent1, [
         { amount: 1000n, nonce: 1, notAfter: currentTime + 1800 }, // 30 min
         { amount: 2000n, nonce: 2, notAfter: currentTime + 3600 }, // 1 hour
-        { amount: 1500n, nonce: 3, notAfter: currentTime + 7200 }  // 2 hours
+        { amount: 1500n, nonce: 3, notAfter: currentTime + 7200 }, // 2 hours
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
   });
 
@@ -1260,11 +1311,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const scope = await registerScope(user1, agent1, totalAmount, 3600, currentTime, currentTime + 86400);
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
 
     it("should revert with expired scope", async function () {
@@ -1282,12 +1332,17 @@ describe("ZeroLC - Charge Settlement", function () {
       await time.increase(15);
 
       const laterTime = await time.latest();
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: laterTime + 3600 }
-      ], laterTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: laterTime + 3600 }],
+        laterTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "AuthorizationScopeExpired");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(
+        zeroLC,
+        "AuthorizationScopeExpired"
+      );
     });
 
     it("should revert with scope notAfter == block.timestamp", async function () {
@@ -1305,12 +1360,17 @@ describe("ZeroLC - Charge Settlement", function () {
       await time.increase(5);
 
       const expirationTime = await time.latest();
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: expirationTime + 3600 }
-      ], expirationTime);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: expirationTime + 3600 }],
+        expirationTime
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "AuthorizationScopeExpired");
+      await expect(zeroLC.settleCharges([chargeBatch])).to.be.revertedWithCustomError(
+        zeroLC,
+        "AuthorizationScopeExpired"
+      );
     });
 
     it("should settle with scope notAfter == block.timestamp + 1 (boundary)", async function () {
@@ -1328,12 +1388,14 @@ describe("ZeroLC - Charge Settlement", function () {
       await time.increase(7);
 
       const beforeExpiration = await time.latest();
-      const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: beforeExpiration + 3600 }
-      ], beforeExpiration);
+      const chargeBatch = await createChargeBatch(
+        scope,
+        agent1,
+        [{ amount: 1000n, nonce: 1, notAfter: beforeExpiration + 3600 }],
+        beforeExpiration
+      );
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
   });
 
@@ -1341,13 +1403,11 @@ describe("ZeroLC - Charge Settlement", function () {
     it("should revert with empty chargeBatches array", async function () {
       const { zeroLC } = await loadFixture(deployZeroLCFixture);
 
-      await expect(zeroLC.settleCharges([]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidBatchLength");
+      await expect(zeroLC.settleCharges([])).to.be.revertedWithCustomError(zeroLC, "InvalidBatchLength");
     });
 
     it("should revert with batch containing empty entries array", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope } =
-        await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
 
       const totalAmount = 100000n;
       await depositForUser(user1, totalAmount);
@@ -1360,11 +1420,10 @@ describe("ZeroLC - Charge Settlement", function () {
         scope: scope,
         entries: [],
         timestamp: currentTime,
-        agentSignature: "0x" + "00".repeat(65) // Dummy signature
+        agentSignature: "0x" + "00".repeat(65), // Dummy signature
       };
 
-      await expect(zeroLC.settleCharges([emptyBatch]))
-        .to.be.revertedWithCustomError(zeroLC, "EmptyChargeBatch");
+      await expect(zeroLC.settleCharges([emptyBatch])).to.be.revertedWithCustomError(zeroLC, "EmptyChargeBatch");
     });
 
     it("should verify non-empty entries in verifyChargeBatchSignature", async function () {
@@ -1379,11 +1438,10 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // Valid batch with entries should work
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
-      await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.not.be.reverted;
+      await expect(zeroLC.settleCharges([chargeBatch])).to.not.be.reverted;
     });
   });
 
@@ -1399,7 +1457,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       // When called via contract, should emit ChargesSettledFromContract with encoded data
@@ -1411,7 +1469,7 @@ describe("ZeroLC - Charge Settlement", function () {
         try {
           const parsed = zeroLC.interface.parseLog({
             topics: log.topics as string[],
-            data: log.data
+            data: log.data,
           });
           return parsed?.name === "ChargesSettledFromContract";
         } catch {
@@ -1433,7 +1491,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       const tx = await settlementCaller.settleChargesViaContract(await zeroLC.getAddress(), [chargeBatch]);
@@ -1444,7 +1502,7 @@ describe("ZeroLC - Charge Settlement", function () {
         try {
           const parsed = zeroLC.interface.parseLog({
             topics: log.topics as string[],
-            data: log.data
+            data: log.data,
           });
           return parsed?.name === "ChargesSettled";
         } catch {
@@ -1466,7 +1524,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       const tx = await settlementCaller.settleChargesViaContract(await zeroLC.getAddress(), [chargeBatch]);
@@ -1476,7 +1534,7 @@ describe("ZeroLC - Charge Settlement", function () {
         try {
           const parsed = zeroLC.interface.parseLog({
             topics: log.topics as string[],
-            data: log.data
+            data: log.data,
           });
           return parsed?.name === "ChargesSettledFromContract";
         } catch {
@@ -1490,7 +1548,7 @@ describe("ZeroLC - Charge Settlement", function () {
       if (events && events.length > 0) {
         const parsedEvent = zeroLC.interface.parseLog({
           topics: events[0].topics as string[],
-          data: events[0].data
+          data: events[0].data,
         });
 
         expect(parsedEvent?.name).to.equal("ChargesSettledFromContract");
@@ -1498,7 +1556,9 @@ describe("ZeroLC - Charge Settlement", function () {
 
         // The data should be the ABI-encoded chargeBatches array
         const encodedBatches = ethers.AbiCoder.defaultAbiCoder().encode(
-          ["tuple(tuple(address user,uint48 totalAmount,uint48 disputeWindow,address agent,uint48 notBefore,uint48 notAfter) scope,tuple(uint48 amount,uint48 nonce,uint48 notAfter)[] entries,uint48 timestamp,bytes agentSignature)[]"],
+          [
+            "tuple(tuple(address user,uint48 totalAmount,uint48 disputeWindow,address agent,uint48 notBefore,uint48 notAfter) scope,tuple(uint48 amount,uint48 nonce,uint48 notAfter)[] entries,uint48 timestamp,bytes agentSignature)[]",
+          ],
           [[chargeBatch]]
         );
 
@@ -1517,26 +1577,26 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       await time.increase(5);
       const laterTime = await time.latest();
       const chargeBatch2 = await createChargeBatch(scope, agent1, [
-        { amount: 2000n, nonce: 2, notAfter: laterTime + 3600 }
+        { amount: 2000n, nonce: 2, notAfter: laterTime + 3600 },
       ]);
 
-      const tx = await settlementCaller.settleChargesViaContract(
-        await zeroLC.getAddress(),
-        [chargeBatch1, chargeBatch2]
-      );
+      const tx = await settlementCaller.settleChargesViaContract(await zeroLC.getAddress(), [
+        chargeBatch1,
+        chargeBatch2,
+      ]);
       const receipt = await tx.wait();
 
       const events = receipt?.logs.filter((log: any) => {
         try {
           const parsed = zeroLC.interface.parseLog({
             topics: log.topics as string[],
-            data: log.data
+            data: log.data,
           });
           return parsed?.name === "ChargesSettledFromContract";
         } catch {
@@ -1550,11 +1610,13 @@ describe("ZeroLC - Charge Settlement", function () {
       if (events && events.length > 0) {
         const parsedEvent = zeroLC.interface.parseLog({
           topics: events[0].topics as string[],
-          data: events[0].data
+          data: events[0].data,
         });
 
         const encodedBatches = ethers.AbiCoder.defaultAbiCoder().encode(
-          ["tuple(tuple(address user,uint48 totalAmount,uint48 disputeWindow,address agent,uint48 notBefore,uint48 notAfter) scope,tuple(uint48 amount,uint48 nonce,uint48 notAfter)[] entries,uint48 timestamp,bytes agentSignature)[]"],
+          [
+            "tuple(tuple(address user,uint48 totalAmount,uint48 disputeWindow,address agent,uint48 notBefore,uint48 notAfter) scope,tuple(uint48 amount,uint48 nonce,uint48 notAfter)[] entries,uint48 timestamp,bytes agentSignature)[]",
+          ],
           [[chargeBatch1, chargeBatch2]]
         );
 
@@ -1573,7 +1635,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const currentTime = await time.latest();
 
       const chargeBatch1 = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 }
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 3600 },
       ]);
 
       // Direct call: tx.origin == msg.sender -> ChargesSettled
@@ -1585,7 +1647,7 @@ describe("ZeroLC - Charge Settlement", function () {
       await time.increase(5);
       const laterTime = await time.latest();
       const chargeBatch2 = await createChargeBatch(scope, agent1, [
-        { amount: 2000n, nonce: 2, notAfter: laterTime + 3600 }
+        { amount: 2000n, nonce: 2, notAfter: laterTime + 3600 },
       ]);
 
       const tx = await settlementCaller.settleChargesViaContract(await zeroLC.getAddress(), [chargeBatch2]);
@@ -1595,7 +1657,7 @@ describe("ZeroLC - Charge Settlement", function () {
         try {
           const parsed = zeroLC.interface.parseLog({
             topics: log.topics as string[],
-            data: log.data
+            data: log.data,
           });
           return parsed?.name === "ChargesSettledFromContract";
         } catch {

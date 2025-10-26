@@ -28,7 +28,9 @@ describe("ZeroLC - Compact User Authorization States", function () {
     await zeroLCImpl.waitForDeployment();
 
     // Deploy a proxy pointing to the implementation
-    const ERC1967ProxyFactory = await ethers.getContractFactory("@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy");
+    const ERC1967ProxyFactory = await ethers.getContractFactory(
+      "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy"
+    );
     const initData = zeroLCImpl.interface.encodeFunctionData("initialize");
     const proxy = await ERC1967ProxyFactory.deploy(await zeroLCImpl.getAddress(), initData);
     await proxy.waitForDeployment();
@@ -98,7 +100,7 @@ describe("ZeroLC - Compact User Authorization States", function () {
       const currentTime = await time.latest();
       const batchTimestamp = timestamp ?? currentTime;
 
-      const chargeEntries = entries.map(e => ({
+      const chargeEntries = entries.map((e) => ({
         amount: e.amount,
         nonce: e.nonce,
         notAfter: e.notAfter,
@@ -109,19 +111,16 @@ describe("ZeroLC - Compact User Authorization States", function () {
       let batchPartHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
       if (chargeEntries.length > 1) {
         const entriesWithoutLast = chargeEntries.slice(0, -1);
-        const encodedEntries = entriesWithoutLast.map(e => [e.amount, e.nonce, e.notAfter]);
+        const encodedEntries = entriesWithoutLast.map((e) => [e.amount, e.nonce, e.notAfter]);
         batchPartHash = ethers.keccak256(
-          ethers.AbiCoder.defaultAbiCoder().encode(
-            ["tuple(uint48,uint48,uint48)[]"],
-            [encodedEntries]
-          )
+          ethers.AbiCoder.defaultAbiCoder().encode(["tuple(uint48,uint24,uint48)[]"], [encodedEntries])
         );
       }
 
       const lastEntry = chargeEntries[chargeEntries.length - 1];
 
       const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [batchPartHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
       );
 
@@ -181,7 +180,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should update numCharges from nonce (nonce - 1) when compacting", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 1000n);
       const currentTime = await time.latest();
@@ -212,7 +212,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should set isNumChargesRecorded flag to 1 after compaction", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 1000n);
       const currentTime = await time.latest();
@@ -311,7 +312,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should compact multiple expired scopes at once", async function () {
-      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 2000n);
       const currentTime = await time.latest();
@@ -421,7 +423,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should handle compaction when scope has remainingAmount == 0", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 1000n);
       const currentTime = await time.latest();
@@ -454,7 +457,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should only record numCharges once (isNumChargesRecorded prevents duplicate)", async function () {
-      const { zeroLC, user1, agent1, agent2, depositForUser, registerScope, createChargeBatch } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, agent2, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 1000n);
       const currentTime = await time.latest();
@@ -493,7 +497,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
 
   describe("8.2 Array Manipulation", function () {
     it("should correctly remove and pack array (swap with last, then pop)", async function () {
-      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 2000n);
       const currentTime = await time.latest();
@@ -552,7 +557,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should handle last element removal", async function () {
-      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 2000n);
       const currentTime = await time.latest();
@@ -577,7 +583,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should handle first element removal", async function () {
-      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 2000n);
       const currentTime = await time.latest();
@@ -606,7 +613,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should handle middle element removal", async function () {
-      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 2000n);
       const currentTime = await time.latest();
@@ -635,7 +643,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should empty array when all scopes are expired", async function () {
-      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, agent2, agent3, depositForUser, registerScope } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 2000n);
       const currentTime = await time.latest();
@@ -710,7 +719,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should update userState.numCharges in storage after compaction", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 1000n);
       const currentTime = await time.latest();
@@ -765,7 +775,8 @@ describe("ZeroLC - Compact User Authorization States", function () {
     });
 
     it("should preserve other scope state during compaction (agentPendingAmount, notAfter, etc.)", async function () {
-      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } = await loadFixture(deployZeroLCFixture);
+      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 1000n);
       const currentTime = await time.latest();

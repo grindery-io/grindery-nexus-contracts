@@ -124,7 +124,10 @@ describe("ZeroLC - Dispute Tests", function () {
     const scopeHash = ethers.keccak256(
       ethers.AbiCoder.defaultAbiCoder().encode(
         ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-        [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+        [
+          domainSeparator,
+          [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
+        ]
       )
     );
 
@@ -133,16 +136,13 @@ describe("ZeroLC - Dispute Tests", function () {
     if (entries.length > 1) {
       const entriesExceptLast = entries.slice(0, -1);
       batchPartHash = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(
-          ["tuple(uint48,uint48,uint48)[]"],
-          [entriesExceptLast]
-        )
+        ethers.AbiCoder.defaultAbiCoder().encode(["tuple(uint48,uint24,uint48)[]"], [entriesExceptLast])
       );
     }
 
     const lastEntry = entries[entries.length - 1];
     const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-      ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+      ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
       [batchPartHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
     );
 
@@ -156,7 +156,12 @@ describe("ZeroLC - Dispute Tests", function () {
     return { chargeBatch, scopeHash };
   }
 
-  async function createDispute(chargeBatch: any, scopeHash: string, amountToClawback: bigint, signer: HardhatEthersSigner = user) {
+  async function createDispute(
+    chargeBatch: any,
+    scopeHash: string,
+    amountToClawback: bigint,
+    signer: HardhatEthersSigner = user
+  ) {
     const domain = {
       name: "ZeroLC",
       version: "1",
@@ -333,11 +338,13 @@ describe("ZeroLC - Dispute Tests", function () {
 
       // Settle charges
       const timestamp = await time.latest();
-      const entries = [{
-        amount: CHARGE_AMOUNT,
-        nonce: 1,
-        notAfter: timestamp + 3600,
-      }];
+      const entries = [
+        {
+          amount: CHARGE_AMOUNT,
+          nonce: 1,
+          notAfter: timestamp + 3600,
+        },
+      ];
 
       const chargeBatch = {
         scope: scope,
@@ -355,13 +362,16 @@ describe("ZeroLC - Dispute Tests", function () {
       const scopeHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-          [scopeDomainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+          [
+            scopeDomainSeparator,
+            [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
+          ]
         )
       );
 
       const lastEntry = entries[0];
       const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [ethers.ZeroHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
       );
 
@@ -471,11 +481,13 @@ describe("ZeroLC - Dispute Tests", function () {
 
       // Second settlement with different nonce
       const timestamp2 = await time.latest();
-      const entries2 = [{
-        amount: CHARGE_AMOUNT,
-        nonce: 2,
-        notAfter: timestamp2 + 3600,
-      }];
+      const entries2 = [
+        {
+          amount: CHARGE_AMOUNT,
+          nonce: 2,
+          notAfter: timestamp2 + 3600,
+        },
+      ];
 
       const chargeBatch2 = {
         scope: scope,
@@ -486,7 +498,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       const lastEntry2 = entries2[0];
       const verifierEncoded2 = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [ethers.ZeroHash, [lastEntry2.amount, lastEntry2.nonce, lastEntry2.notAfter], scopeHash]
       );
 
@@ -554,8 +566,7 @@ describe("ZeroLC - Dispute Tests", function () {
       await time.increase(DISPUTE_WINDOW + 1);
 
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT);
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "DisputeWindowExpired");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "DisputeWindowExpired");
     });
 
     it("should dispute with very short dispute window (10 seconds)", async function () {
@@ -664,8 +675,7 @@ describe("ZeroLC - Dispute Tests", function () {
       await expect(zeroLC.dispute([dispute])).to.not.be.reverted;
 
       // Try to dispute the same batch again
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
     });
   });
 
@@ -682,12 +692,12 @@ describe("ZeroLC - Dispute Tests", function () {
       const dispute = {
         chargeBatch: chargeBatch,
         amountToClawback: CHARGE_AMOUNT,
-        signature: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12",
+        signature:
+          "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12",
       };
 
       // The actual error might be from ECDSA validation before reaching the dispute signature check
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.reverted; // Just check that it reverts, regardless of the exact message
+      await expect(zeroLC.dispute([dispute])).to.be.reverted; // Just check that it reverts, regardless of the exact message
     });
 
     it("should revert dispute with wrong signer", async function () {
@@ -697,8 +707,7 @@ describe("ZeroLC - Dispute Tests", function () {
       // Create dispute signed by thirdParty instead of user
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT, thirdParty);
 
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidDisputeSignature");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "InvalidDisputeSignature");
     });
 
     it("should revert dispute with tampered amountToClawback", async function () {
@@ -711,8 +720,7 @@ describe("ZeroLC - Dispute Tests", function () {
       // Tamper with the amount
       dispute.amountToClawback = CHARGE_AMOUNT / BigInt(2);
 
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidDisputeSignature");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "InvalidDisputeSignature");
     });
 
     it("should revert dispute with tampered scopeHash", async function () {
@@ -725,8 +733,7 @@ describe("ZeroLC - Dispute Tests", function () {
       chargeBatch.scope.totalAmount = SCOPE_AMOUNT + 1000n;
 
       // Will fail with "Invalid signature" during batch verification
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.reverted;
+      await expect(zeroLC.dispute([dispute])).to.be.reverted;
     });
 
     it("should verify dispute signature uses correct EIP712 type hash", async function () {
@@ -774,7 +781,7 @@ describe("ZeroLC - Dispute Tests", function () {
       const MockERC1271WalletFactory = await ethers.getContractFactory("MockERC1271Wallet");
       const walletInitCode = ethers.concat([
         MockERC1271WalletFactory.bytecode,
-        ethers.AbiCoder.defaultAbiCoder().encode(["address"], [owner.address])
+        ethers.AbiCoder.defaultAbiCoder().encode(["address"], [owner.address]),
       ]);
 
       const salt = ethers.randomBytes(32);
@@ -824,7 +831,7 @@ describe("ZeroLC - Dispute Tests", function () {
           ["address", "bytes", "bytes"],
           [await factory.getAddress(), ethers.concat([salt, walletInitCode]), ownerScopeSignature]
         ),
-        "0x6492649264926492649264926492649264926492649264926492649264926492"
+        "0x6492649264926492649264926492649264926492649264926492649264926492",
       ]);
 
       // Approve tokens from counterfactual wallet (we need to deploy it first for this)
@@ -897,8 +904,7 @@ describe("ZeroLC - Dispute Tests", function () {
       const excessiveAmount = CHARGE_AMOUNT + BigInt(1);
       const dispute = await createDispute(chargeBatch, scopeHash, excessiveAmount);
 
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "ClawbackExceedsBatchTotal");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "ClawbackExceedsBatchTotal");
     });
 
     it("should revert dispute with amountToClawback > agentPendingAmount", async function () {
@@ -922,8 +928,7 @@ describe("ZeroLC - Dispute Tests", function () {
       // This test scenario is actually not realistic - changing to test duplicate dispute instead
       const duplicateDispute = await createDispute(chargeBatch, scopeHash, scopeState.agentPendingAmount + BigInt(1));
 
-      await expect(zeroLC.dispute([duplicateDispute]))
-        .to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
+      await expect(zeroLC.dispute([duplicateDispute])).to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
     });
 
     it("should revert dispute with zero amountToClawback", async function () {
@@ -933,8 +938,7 @@ describe("ZeroLC - Dispute Tests", function () {
       const dispute = await createDispute(chargeBatch, scopeHash, BigInt(0));
 
       // Zero clawback should be rejected
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidClawbackAmount");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "InvalidClawbackAmount");
     });
 
     it("should calculate totalChargedAmount correctly from entries", async function () {
@@ -964,7 +968,10 @@ describe("ZeroLC - Dispute Tests", function () {
       const scopeHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-          [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+          [
+            domainSeparator,
+            [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
+          ]
         )
       );
 
@@ -972,14 +979,14 @@ describe("ZeroLC - Dispute Tests", function () {
       const entriesExceptLast = entries.slice(0, -1);
       const batchPartHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
-          ["tuple(uint48,uint48,uint48)[]"],
+          ["tuple(uint48,uint24,uint48)[]"],
           [entriesExceptLast.map((e: any) => [e.amount, e.nonce, e.notAfter])]
         )
       );
 
       const lastEntry = entries[entries.length - 1];
       const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [batchPartHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
       );
 
@@ -997,8 +1004,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       // Try to dispute more than total - this should fail with amount validation error first
       const excessDispute = await createDispute(chargeBatch, scopeHash, totalAmount + BigInt(1));
-      await expect(zeroLC.dispute([excessDispute]))
-        .to.be.revertedWithCustomError(zeroLC, "ClawbackExceedsBatchTotal");
+      await expect(zeroLC.dispute([excessDispute])).to.be.revertedWithCustomError(zeroLC, "ClawbackExceedsBatchTotal");
     });
   });
 
@@ -1017,8 +1023,7 @@ describe("ZeroLC - Dispute Tests", function () {
       await zeroLC.dispute([dispute]);
 
       // Second dispute should fail
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
     });
 
     it("should verify dispute hash calculation is unique per batch", async function () {
@@ -1028,11 +1033,13 @@ describe("ZeroLC - Dispute Tests", function () {
       // Settle second batch
       await time.increase(2);
       const timestamp2 = await time.latest();
-      const entries2 = [{
-        amount: CHARGE_AMOUNT,
-        nonce: 2,
-        notAfter: timestamp2 + 3600,
-      }];
+      const entries2 = [
+        {
+          amount: CHARGE_AMOUNT,
+          nonce: 2,
+          notAfter: timestamp2 + 3600,
+        },
+      ];
 
       const chargeBatch2 = {
         scope: scope,
@@ -1043,7 +1050,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       const lastEntry2 = entries2[0];
       const verifierEncoded2 = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [ethers.ZeroHash, [lastEntry2.amount, lastEntry2.nonce, lastEntry2.notAfter], scopeHash]
       );
 
@@ -1067,11 +1074,11 @@ describe("ZeroLC - Dispute Tests", function () {
       // Calculate expected dispute hash
       const expectedDisputeHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
-          ["tuple(address,uint48,uint48,address,uint48,uint48)", "tuple(uint48,uint48,uint48)[]", "uint48"],
+          ["tuple(address,uint48,uint48,address,uint48,uint48)", "tuple(uint48,uint24,uint48)[]", "uint48"],
           [
             [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
             chargeBatch.entries.map((e: any) => [e.amount, e.nonce, e.notAfter]),
-            chargeBatch.timestamp
+            chargeBatch.timestamp,
           ]
         )
       );
@@ -1091,11 +1098,11 @@ describe("ZeroLC - Dispute Tests", function () {
       // Calculate hash for batch1
       const hash1 = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
-          ["tuple(address,uint48,uint48,address,uint48,uint48)", "tuple(uint48,uint48,uint48)[]", "uint48"],
+          ["tuple(address,uint48,uint48,address,uint48,uint48)", "tuple(uint48,uint24,uint48)[]", "uint48"],
           [
             [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
             batch1.entries.map((e: any) => [e.amount, e.nonce, e.notAfter]),
-            batch1.timestamp
+            batch1.timestamp,
           ]
         )
       );
@@ -1103,19 +1110,21 @@ describe("ZeroLC - Dispute Tests", function () {
       // Settle second batch with different timestamp
       await time.increase(2);
       const timestamp2 = await time.latest();
-      const entries2 = [{
-        amount: CHARGE_AMOUNT,
-        nonce: 2,
-        notAfter: timestamp2 + 3600,
-      }];
+      const entries2 = [
+        {
+          amount: CHARGE_AMOUNT,
+          nonce: 2,
+          notAfter: timestamp2 + 3600,
+        },
+      ];
 
       const hash2 = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
-          ["tuple(address,uint48,uint48,address,uint48,uint48)", "tuple(uint48,uint48,uint48)[]", "uint48"],
+          ["tuple(address,uint48,uint48,address,uint48,uint48)", "tuple(uint48,uint24,uint48)[]", "uint48"],
           [
             [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
             entries2.map((e: any) => [e.amount, e.nonce, e.notAfter]),
-            timestamp2
+            timestamp2,
           ]
         )
       );
@@ -1142,17 +1151,20 @@ describe("ZeroLC - Dispute Tests", function () {
       const scope = await registerScope();
       const timestamp = await time.latest();
 
-      const entries = [{
-        amount: CHARGE_AMOUNT,
-        nonce: 1,
-        notAfter: timestamp + 3600,
-      }];
+      const entries = [
+        {
+          amount: CHARGE_AMOUNT,
+          nonce: 1,
+          notAfter: timestamp + 3600,
+        },
+      ];
 
       const chargeBatch = {
         scope: scope,
         entries: entries,
         timestamp: timestamp,
-        agentSignature: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12",
+        agentSignature:
+          "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12",
       };
 
       const domainSeparator = ethers.TypedDataEncoder.hashDomain({
@@ -1164,26 +1176,30 @@ describe("ZeroLC - Dispute Tests", function () {
       const scopeHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-          [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+          [
+            domainSeparator,
+            [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
+          ]
         )
       );
 
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT);
 
       // Invalid signature might throw custom error or ECDSA error
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.reverted;
+      await expect(zeroLC.dispute([dispute])).to.be.reverted;
     });
 
     it("should validate charge batch signature before processing dispute", async function () {
       const scope = await registerScope();
       const timestamp = await time.latest();
 
-      const entries = [{
-        amount: CHARGE_AMOUNT,
-        nonce: 1,
-        notAfter: timestamp + 3600,
-      }];
+      const entries = [
+        {
+          amount: CHARGE_AMOUNT,
+          nonce: 1,
+          notAfter: timestamp + 3600,
+        },
+      ];
 
       const chargeBatch = {
         scope: scope,
@@ -1201,14 +1217,17 @@ describe("ZeroLC - Dispute Tests", function () {
       const scopeHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-          [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+          [
+            domainSeparator,
+            [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
+          ]
         )
       );
 
       // Sign with wrong signer (thirdParty instead of agent)
       const lastEntry = entries[0];
       const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [ethers.ZeroHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
       );
 
@@ -1218,8 +1237,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT);
 
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
   });
 
@@ -1233,11 +1251,13 @@ describe("ZeroLC - Dispute Tests", function () {
       const currentTime = await time.latest();
       const futureTimestamp = currentTime + 100;
 
-      const entries = [{
-        amount: CHARGE_AMOUNT,
-        nonce: 1,
-        notAfter: futureTimestamp + 3600,
-      }];
+      const entries = [
+        {
+          amount: CHARGE_AMOUNT,
+          nonce: 1,
+          notAfter: futureTimestamp + 3600,
+        },
+      ];
 
       const chargeBatch = {
         scope: scope,
@@ -1255,13 +1275,16 @@ describe("ZeroLC - Dispute Tests", function () {
       const scopeHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-          [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+          [
+            domainSeparator,
+            [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
+          ]
         )
       );
 
       const lastEntry = entries[0];
       const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [ethers.ZeroHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
       );
 
@@ -1272,19 +1295,20 @@ describe("ZeroLC - Dispute Tests", function () {
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT);
 
       // Will revert either with "Future charge batch" or panic (underflow)
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.reverted;
+      await expect(zeroLC.dispute([dispute])).to.be.reverted;
     });
 
     it("should dispute with timestamp == block.timestamp (boundary)", async function () {
       const scope = await registerScope();
       const currentTime = await time.latest();
 
-      const entries = [{
-        amount: CHARGE_AMOUNT,
-        nonce: 1,
-        notAfter: currentTime + 3600,
-      }];
+      const entries = [
+        {
+          amount: CHARGE_AMOUNT,
+          nonce: 1,
+          notAfter: currentTime + 3600,
+        },
+      ];
 
       const chargeBatch = {
         scope: scope,
@@ -1302,13 +1326,16 @@ describe("ZeroLC - Dispute Tests", function () {
       const scopeHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-          [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+          [
+            domainSeparator,
+            [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
+          ]
         )
       );
 
       const lastEntry = entries[0];
       const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "tuple(uint48,uint48,uint48)", "bytes32"],
+        ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],
         [ethers.ZeroHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
       );
 
@@ -1342,8 +1369,7 @@ describe("ZeroLC - Dispute Tests", function () {
     });
 
     it("should revert dispute with empty disputes array", async function () {
-      await expect(zeroLC.dispute([]))
-        .to.be.revertedWithCustomError(zeroLC, "InvalidBatchLength");
+      await expect(zeroLC.dispute([])).to.be.revertedWithCustomError(zeroLC, "InvalidBatchLength");
     });
 
     it("should verify dispute validates non-empty charge batch entries", async function () {
@@ -1367,14 +1393,16 @@ describe("ZeroLC - Dispute Tests", function () {
       const scopeHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-          [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+          [
+            domainSeparator,
+            [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter],
+          ]
         )
       );
 
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT);
 
-      await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWithCustomError(zeroLC, "EmptyChargeBatch");
+      await expect(zeroLC.dispute([dispute])).to.be.revertedWithCustomError(zeroLC, "EmptyChargeBatch");
     });
   });
 });
