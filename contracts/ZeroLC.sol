@@ -32,7 +32,8 @@ struct AuthorizationScope {
 struct AuthorizationScopeState {
     uint48 remainingAmount;
     uint48 agentPendingAmount;
-    uint48 nonce;
+    uint24 nonce;
+    uint24 withdrawalNonce; // Tracks the last charge nonce that has been withdrawn
     uint48 notAfter;
     uint48 lastChargeTimestamp;
     uint8 isNumChargesRecorded;
@@ -40,7 +41,7 @@ struct AuthorizationScopeState {
 
 struct ChargeEntry {
     uint48 amount;
-    uint48 nonce;
+    uint48 nonce; // TODO: Change to uint24 to match AuthorizationScopeState.nonce, update all signature-related code, and remove type casting
     uint48 notAfter;
 }
 
@@ -108,6 +109,13 @@ contract ZeroLC is
         address indexed agent,
         bytes32 indexed scopeHash,
         uint256 amount
+    );
+
+    event AgentWithdrawal(
+        address indexed agent,
+        bytes32 indexed scopeHash,
+        uint256 amount,
+        bool toWallet
     );
 
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
@@ -244,6 +252,7 @@ contract ZeroLC is
             remainingAmount: scope.totalAmount,
             agentPendingAmount: 0,
             nonce: 1,
+            withdrawalNonce: 0,
             notAfter: scope.notAfter,
             lastChargeTimestamp: 0,
             isNumChargesRecorded: 0
@@ -333,7 +342,7 @@ contract ZeroLC is
                 "Invalid batch timestamp (must be greater than last charge timestamp)"
             );
             uint48 totalAmount = 0;
-            uint48 nonce = state.nonce;
+            uint24 nonce = state.nonce;
             for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
                 ChargeEntry memory entry = chargeBatch.entries[j];
                 require(entry.nonce == nonce, "Invalid nonce");
@@ -354,6 +363,7 @@ contract ZeroLC is
                 remainingAmount: remainingAmount - totalAmount,
                 agentPendingAmount: state.agentPendingAmount + totalAmount,
                 nonce: nonce,
+                withdrawalNonce: state.withdrawalNonce,
                 notAfter: state.notAfter,
                 lastChargeTimestamp: chargeBatch.timestamp,
                 isNumChargesRecorded: state.isNumChargesRecorded
@@ -521,5 +531,207 @@ contract ZeroLC is
         address user
     ) public view returns (bytes32[] memory) {
         return userStates[user].authorizationScopeHashes;
+    }
+
+    // Public function for agent to directly withdraw funds
+    function withdrawAgentChargedFund(
+        AuthorizationScope calldata scope,
+        bool toWallet,
+        ChargeBatch[] calldata recentCharges
+    ) external nonReentrant {
+        bytes32 scopeHash = getScopeHash(scope);
+        require(msg.sender == scope.agent, "Caller is not the agent");
+        _withdrawAgentChargedFundInternal(scope, scopeHash, toWallet, recentCharges);
+    }
+
+    // Public function for third-party to submit withdrawal with agent's signature
+    function withdrawAgentChargedFund(
+        AuthorizationScope calldata scope,
+        bool toWallet,
+        ChargeBatch[] calldata recentCharges,
+        bytes calldata signature
+    ) external nonReentrant {
+        bytes32 scopeHash = getScopeHash(scope);
+        bytes32 recentChargesHash = keccak256(abi.encode(recentCharges));
+        uint256 nonce = userStates[scope.agent].nonce;
+
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    keccak256("WithdrawAgentChargedFund(bytes32 scopeHash,bool toWallet,bytes32 recentChargesHash,uint256 nonce)"),
+                    scopeHash,
+                    toWallet,
+                    recentChargesHash,
+                    nonce
+                )
+            )
+        );
+
+        require(
+            universalSigValidator.isValidSig(scope.agent, digest, signature),
+            "Invalid withdrawal signature"
+        );
+
+        userStates[scope.agent].nonce = nonce + 1;
+        _withdrawAgentChargedFundInternal(scope, scopeHash, toWallet, recentCharges);
+    }
+
+    // View function to get withdrawable amount using simple method
+    function getWithdrawableAmountSimple(
+        AuthorizationScope calldata scope
+    ) public view returns (uint48) {
+        bytes32 scopeHash = getScopeHash(scope);
+        return _calculateWithdrawableSimple(scopeHash, scope.disputeWindow);
+    }
+
+    // View function to get withdrawable amount using detailed method
+    function getWithdrawableAmountDetailed(
+        AuthorizationScope calldata scope,
+        ChargeBatch[] calldata recentCharges
+    ) public view returns (uint48) {
+        bytes32 scopeHash = getScopeHash(scope);
+        AuthorizationScopeState memory state = authorizationScopes[scopeHash];
+        (uint48 withdrawable, ) = _calculateWithdrawableDetailed(
+            scopeHash,
+            scope,
+            recentCharges,
+            state.withdrawalNonce
+        );
+        return withdrawable;
+    }
+
+    // View function to get agent's pending amount for a scope
+    function getAgentPendingAmount(
+        AuthorizationScope calldata scope
+    ) public view returns (uint48) {
+        bytes32 scopeHash = getScopeHash(scope);
+        return authorizationScopes[scopeHash].agentPendingAmount;
+    }
+
+    // View function to get agent's withdrawal nonce for a scope
+    function getAgentWithdrawalNonce(
+        AuthorizationScope calldata scope
+    ) public view returns (uint24) {
+        bytes32 scopeHash = getScopeHash(scope);
+        return authorizationScopes[scopeHash].withdrawalNonce;
+    }
+
+    // Internal helper function for simple withdrawal calculation
+    function _calculateWithdrawableSimple(
+        bytes32 scopeHash,
+        uint48 disputeWindow
+    ) internal view returns (uint48) {
+        AuthorizationScopeState memory state = authorizationScopes[scopeHash];
+
+        // If last charge is outside dispute window, all pending is withdrawable
+        if (block.timestamp >= state.lastChargeTimestamp + disputeWindow) {
+            return state.agentPendingAmount;
+        }
+        return 0; // Conservative: nothing withdrawable if any charge in window
+    }
+
+    // Internal helper function for detailed withdrawal calculation
+    function _calculateWithdrawableDetailed(
+        bytes32 scopeHash,
+        AuthorizationScope calldata scope,
+        ChargeBatch[] calldata recentCharges,
+        uint24 currentWithdrawalNonce
+    ) internal view returns (uint48 withdrawable, uint24 newWithdrawalNonce) {
+        AuthorizationScopeState memory state = authorizationScopes[scopeHash];
+
+        uint48 totalWithdrawableCharges = 0;
+        uint24 expectedNonce = currentWithdrawalNonce + 1;
+        uint24 highestNonce = currentWithdrawalNonce;
+
+        // Process all provided charge batches and verify they are past dispute window
+        for (uint256 i = 0; i < recentCharges.length; i++) {
+            ChargeBatch calldata batch = recentCharges[i];
+
+            // Verify charge batch signature
+            verifyChargeBatchSignature(batch);
+
+            // Verify batch scope matches
+            require(getScopeHash(batch.scope) == scopeHash, "Scope mismatch");
+
+            // Verify batch timestamp is valid (not in future)
+            require(batch.timestamp <= block.timestamp, "Future charge batch");
+
+            // Reject if this batch is still within dispute window
+            require(
+                batch.timestamp <= block.timestamp - scope.disputeWindow,
+                "Charge batch still in dispute window"
+            );
+
+            // Process each entry in the batch
+            for (uint256 j = 0; j < batch.entries.length; j++) {
+                ChargeEntry memory entry = batch.entries[j];
+                uint24 entryNonce = uint24(entry.nonce);
+
+                // Verify nonce continuity - must be sequential with no gaps
+                require(entryNonce == expectedNonce, "Non-continuous nonce sequence");
+
+                totalWithdrawableCharges += entry.amount;
+
+                expectedNonce++;
+                if (entryNonce > highestNonce) {
+                    highestNonce = entryNonce;
+                }
+            }
+        }
+
+        // Verify that total provided charges don't exceed pending amount
+        require(
+            totalWithdrawableCharges <= state.agentPendingAmount,
+            "Provided charges exceed pending amount"
+        );
+
+        // All provided charges are withdrawable (since all are past dispute window)
+        withdrawable = totalWithdrawableCharges;
+        newWithdrawalNonce = highestNonce;
+
+        return (withdrawable, newWithdrawalNonce);
+    }
+
+    // Internal core withdrawal logic
+    function _withdrawAgentChargedFundInternal(
+        AuthorizationScope calldata scope,
+        bytes32 scopeHash,
+        bool toWallet,
+        ChargeBatch[] calldata recentCharges
+    ) internal {
+        AuthorizationScopeState storage state = authorizationScopes[scopeHash];
+
+        // Calculate withdrawable amount
+        uint48 withdrawable;
+        uint24 newWithdrawalNonce = state.withdrawalNonce;
+
+        if (recentCharges.length == 0) {
+            withdrawable = _calculateWithdrawableSimple(scopeHash, scope.disputeWindow);
+            // Simple method: update withdrawalNonce to current nonce - 1
+            // (all charges up to nonce-1 are considered withdrawn)
+            newWithdrawalNonce = state.nonce - 1;
+        } else {
+            (withdrawable, newWithdrawalNonce) = _calculateWithdrawableDetailed(
+                scopeHash,
+                scope,
+                recentCharges,
+                state.withdrawalNonce
+            );
+        }
+
+        require(withdrawable > 0, "No withdrawable balance");
+
+        // Update state
+        state.agentPendingAmount -= withdrawable;
+        state.withdrawalNonce = newWithdrawalNonce;
+
+        // Transfer or credit
+        if (toWallet) {
+            gasToken.safeTransfer(scope.agent, withdrawable);
+        } else {
+            userStates[scope.agent].balance += withdrawable;
+        }
+
+        emit AgentWithdrawal(scope.agent, scopeHash, withdrawable, toWallet);
     }
 }

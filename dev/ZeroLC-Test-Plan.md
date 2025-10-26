@@ -584,12 +584,145 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ---
 
-## 20. Future Function Compatibility
+## 20. Agent Withdrawal Tests
 
-- [ ] Contract ready for withdrawal function addition
-- [ ] Contract ready for agent claim function addition
+### 20.1 Simple Withdrawal Method (Empty recentCharges)
+
+- [ ] Withdraw when all charges are past dispute window (lastChargeTimestamp + disputeWindow <= block.timestamp)
+- [ ] Withdraw to wallet (toWallet = true) successfully transfers ERC20 tokens to agent
+- [ ] Withdraw to balance (toWallet = false) credits agent's internal balance
+- [ ] Attempt withdrawal when charges still in dispute window (should return 0 withdrawable, revert with "No withdrawable balance")
+- [ ] Withdraw updates agentPendingAmount correctly (decreases by withdrawn amount)
+- [ ] Withdraw updates withdrawalNonce to nonce - 1
+- [ ] Withdraw emits AgentWithdrawal event with correct parameters
+- [ ] Withdraw with no charges settled (nonce == 1, should revert "No withdrawable balance")
+- [ ] Withdraw at exact dispute window boundary (lastChargeTimestamp + disputeWindow == block.timestamp)
+- [ ] Multiple consecutive withdrawals (second should fail with "No withdrawable balance")
+- [ ] Withdraw after all charges fully withdrawn (should revert)
+
+### 20.2 Detailed Withdrawal Method (With recentCharges)
+
+- [ ] Withdraw providing continuous charge sequence from withdrawalNonce + 1
+- [ ] Withdraw with single charge batch
+- [ ] Withdraw with multiple charge batches
+- [ ] Withdraw verifies charge batch signatures
+- [ ] Withdraw rejects if batch scope doesn't match (should revert "Scope mismatch")
+- [ ] Withdraw rejects if charge batch has future timestamp (should revert "Future charge batch")
+- [ ] Withdraw rejects if any batch still in dispute window (should revert "Charge batch still in dispute window")
+- [ ] Withdraw accepts batches exactly at dispute window boundary (timestamp == block.timestamp - disputeWindow)
+- [ ] Withdraw verifies nonce continuity (must start at withdrawalNonce + 1)
+- [ ] Withdraw rejects if nonces have gaps (should revert "Non-continuous nonce sequence")
+- [ ] Withdraw rejects if nonces don't start from withdrawalNonce + 1
+- [ ] Withdraw rejects if nonces are out of order
+- [ ] Withdraw calculates totalWithdrawableCharges correctly
+- [ ] Withdraw rejects if provided charges exceed agentPendingAmount (should revert "Provided charges exceed pending amount")
+- [ ] Withdraw updates withdrawalNonce to highest provided nonce
+- [ ] Withdraw updates agentPendingAmount correctly
+- [ ] Withdraw with partial charge sequence (withdraw nonces 1-5, leaving 6-10 for later)
+- [ ] Second withdrawal continues from previous withdrawalNonce (withdraw nonces 6-10 after withdrawing 1-5)
+- [ ] Withdraw attempts to reuse already withdrawn charges (should revert "Non-continuous nonce sequence")
+
+### 20.3 Signature-Based Withdrawal (Third-Party Relayer)
+
+- [ ] Third-party submits withdrawal with valid agent signature
+- [ ] Withdrawal signature uses correct EIP-712 structure: WithdrawAgentChargedFund(bytes32 scopeHash,bool toWallet,bytes32 recentChargesHash,uint256 nonce)
+- [ ] Signature verification uses universalSigValidator
+- [ ] Signature with wrong scopeHash (should revert "Invalid withdrawal signature")
+- [ ] Signature with wrong toWallet value (should revert "Invalid withdrawal signature")
+- [ ] Signature with wrong recentChargesHash (should revert "Invalid withdrawal signature")
+- [ ] Signature with wrong nonce (should revert "Invalid withdrawal signature")
+- [ ] Signature from non-agent address (should revert "Invalid withdrawal signature")
+- [ ] Signature replay attack prevented (nonce increments after successful withdrawal)
+- [ ] Signature with ERC-1271 smart wallet
+- [ ] Signature with ERC-6492 counterfactual signature
+- [ ] Nonce increments correctly after signature-based withdrawal
+- [ ] Multiple signature-based withdrawals with incrementing nonces
+
+### 20.4 Access Control & Authorization
+
+- [ ] Direct withdrawal requires msg.sender == scope.agent
+- [ ] Direct withdrawal by non-agent (should revert "Caller is not the agent")
+- [ ] Signature-based withdrawal verifies agent signature (not msg.sender)
+- [ ] Withdrawal from non-existent scope (agentPendingAmount == 0)
+
+### 20.5 State Updates & Side Effects
+
+- [ ] Withdrawal decreases agentPendingAmount by exact withdrawn amount
+- [ ] Withdrawal updates withdrawalNonce correctly (simple method: nonce - 1)
+- [ ] Withdrawal updates withdrawalNonce correctly (detailed method: highest provided nonce)
+- [ ] Withdrawal to wallet transfers correct ERC20 amount to agent
+- [ ] Withdrawal to balance increases agent's userState.balance
+- [ ] Withdrawal doesn't affect user's balance
+- [ ] Withdrawal doesn't affect remainingAmount in scope
+- [ ] Withdrawal doesn't affect scope notAfter
+- [ ] Withdrawal doesn't affect lastChargeTimestamp
+
+### 20.6 View Functions
+
+- [ ] getWithdrawableAmountSimple returns correct amount when all charges past dispute window
+- [ ] getWithdrawableAmountSimple returns 0 when charges still in dispute window
+- [ ] getWithdrawableAmountSimple at exact boundary (lastChargeTimestamp + disputeWindow == block.timestamp)
+- [ ] getWithdrawableAmountSimple callable by anyone (not just agent)
+- [ ] getWithdrawableAmountDetailed returns correct amount with valid charge sequence
+- [ ] getWithdrawableAmountDetailed with partial charge sequence
+- [ ] getWithdrawableAmountDetailed callable by anyone
+- [ ] getWithdrawableAmountDetailed with invalid charge sequence (should revert)
+- [ ] getAgentPendingAmount returns correct total pending amount
+- [ ] getAgentPendingAmount callable by anyone
+- [ ] getAgentWithdrawalNonce returns correct withdrawal nonce
+- [ ] getAgentWithdrawalNonce returns 0 for new scope
+- [ ] getAgentWithdrawalNonce callable by anyone
+
+### 20.7 Edge Cases & Boundary Conditions
+
+- [ ] Withdraw with agentPendingAmount at uint48 max
+- [ ] Withdraw with withdrawalNonce at uint24 max (16,777,215)
+- [ ] Withdraw with nonce at uint24 max
+- [ ] Withdraw with very long dispute window (uint48 max seconds)
+- [ ] Withdraw with very short dispute window (1 second)
+- [ ] Withdraw immediately after charge settlement
+- [ ] Withdraw long after charge settlement (years later)
+- [ ] Withdraw with exactly 1 wei
+- [ ] Withdraw with scope that has expired (notAfter < block.timestamp) but charges past dispute
+- [ ] Withdrawal after scope revoked (should still work if charges past dispute)
+- [ ] Withdrawal after dispute clawed back some funds
+
+### 20.8 Integration Scenarios
+
+- [ ] Full lifecycle: register → settle → wait dispute window → withdraw (simple method)
+- [ ] Full lifecycle: register → settle → withdraw partial → settle more → withdraw rest
+- [ ] Full lifecycle: register → settle many times → withdraw all at once (detailed method)
+- [ ] Withdrawal interleaved with new settlements (withdraw old, settle new, withdraw again)
+- [ ] Withdrawal after multiple disputes (agentPendingAmount reduced)
+- [ ] Agent with multiple scopes withdraws from each independently
+- [ ] Same agent withdraws from different scopes at different times
+- [ ] Withdrawal from scope with mixed withdrawn/unwithdrawn charges
+
+### 20.9 Security & Attack Vectors
+
+- [ ] Cannot withdraw same charges twice (withdrawalNonce prevents replay)
+- [ ] Cannot skip charges to inflate withdrawable amount (nonce continuity check)
+- [ ] Cannot provide fake charges (signature verification)
+- [ ] Cannot withdraw charges still in dispute window (timestamp check)
+- [ ] Cannot withdraw more than agentPendingAmount
+- [ ] Reentrancy protection on withdrawal functions
+- [ ] Front-running withdrawal doesn't break state
+- [ ] Signature replay attack prevented (nonce-based)
+- [ ] Cannot manipulate withdrawalNonce directly
+
+### 20.10 Gas Optimization Validation
+
+- [ ] Simple method uses less gas than detailed method
+- [ ] Withdrawing larger sequences is gas-efficient
+- [ ] View functions are gas-efficient for off-chain queries
+
+---
+
+## 21. Future Function Compatibility
+
+- [x] Contract ready for withdrawal function addition (✅ Implemented in Section 20)
 - [ ] ROLE_OPERATOR ready for future use
-- [ ] Withdrawal event ready for future use
+- [x] Withdrawal event ready for future use (✅ AgentWithdrawal event implemented)
 - [ ] Upgradeability considerations tested
 
 ---
@@ -612,6 +745,7 @@ test/
     ├── ZeroLC.authorization.test.ts
     ├── ZeroLC.settlement.test.ts
     ├── ZeroLC.dispute.test.ts
+    ├── ZeroLC.withdrawal.test.ts      // NEW: Agent withdrawal tests
     ├── ZeroLC.balances.test.ts
     ├── ZeroLC.compact.test.ts
     ├── ZeroLC.integration.test.ts
@@ -628,7 +762,7 @@ test/
 
 ## Progress Tracking
 
-**Total Tests**: 200+
+**Total Tests**: 300+
 
 **Completed**: 217
 - Section 2.1 - Direct Deposit (7 tests)
@@ -658,9 +792,31 @@ test/
 - Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: 6+
+**Not Started**: 90+ (Section 20 - Agent Withdrawal)
 
 ### Recent Updates
+- ✅ **Added Section 20 - Agent Withdrawal Tests** (90+ test cases)
+  - Comprehensive coverage of simple withdrawal method (empty recentCharges)
+  - Detailed withdrawal method with continuous nonce verification
+  - Signature-based withdrawal for third-party relayers
+  - Access control and authorization tests
+  - State update verification
+  - View function tests (all publicly callable)
+  - Edge cases and boundary conditions
+  - Integration scenarios
+  - Security and attack vector prevention
+  - Gas optimization validation
+- ✅ **Implemented Agent Withdrawal Feature** in [contracts/ZeroLC.sol](contracts/ZeroLC.sol)
+  - Modified `AuthorizationScopeState` struct: added `withdrawalNonce` (uint24), changed `nonce` to uint24
+  - Added `withdrawAgentChargedFund` functions (direct + signature-based)
+  - Implemented simple method: wait for all charges to pass dispute window
+  - Implemented detailed method: provide continuous charge sequence, verify nonces, reject batches in dispute window
+  - Added view functions: `getWithdrawableAmountSimple`, `getWithdrawableAmountDetailed`, `getAgentPendingAmount`, `getAgentWithdrawalNonce`
+  - Added `AgentWithdrawal` event
+  - Withdrawal always extracts maximum available amount (no partial withdrawals)
+  - Supports withdrawal to wallet (ERC-20 transfer) or to balance
+
+### Previous Updates
 - ✅ Completed Section 8 - Compact User Authorization States (23 tests total)
 - ✅ Created [test/ZeroLC/ZeroLC.compact.test.ts](test/ZeroLC/ZeroLC.compact.test.ts)
 - ✅ Implemented comprehensive tests for compaction logic (12 tests)
