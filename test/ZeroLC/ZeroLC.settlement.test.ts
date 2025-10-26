@@ -1167,7 +1167,7 @@ describe("ZeroLC - Charge Settlement", function () {
         .to.not.be.reverted;
     });
 
-    it("should settle with entry.notAfter == block.timestamp (boundary, valid)", async function () {
+    it("should settle with entry.notAfter == block.timestamp + 1 (boundary, valid)", async function () {
       const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
         await loadFixture(deployZeroLCFixture);
 
@@ -1180,11 +1180,33 @@ describe("ZeroLC - Charge Settlement", function () {
       let currentTime = await time.latest();
 
       const chargeBatch = await createChargeBatch(scope, agent1, [
-        { amount: 1000n, nonce: 1, notAfter: currentTime + 1 } // Expires in next block
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 2 } // notAfter will be block.timestamp + 1 when settled
       ], currentTime);
 
+      // notAfter is EXCLUSIVE, so entry.notAfter == block.timestamp + 1 is still valid
       await expect(zeroLC.settleCharges([chargeBatch]))
         .to.not.be.reverted;
+    });
+
+    it("should revert with entry.notAfter == block.timestamp (boundary, expired)", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, createChargeBatch } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const scope = await registerScope(user1, agent1, totalAmount);
+
+      // Get current time right before creating the batch
+      let currentTime = await time.latest();
+
+      const chargeBatch = await createChargeBatch(scope, agent1, [
+        { amount: 1000n, nonce: 1, notAfter: currentTime + 1 } // notAfter will equal block.timestamp when settled
+      ], currentTime);
+
+      // notAfter is EXCLUSIVE, so entry.notAfter == block.timestamp means expired
+      await expect(zeroLC.settleCharges([chargeBatch]))
+        .to.be.revertedWith("Charge entry expired");
     });
 
     it("should revert with entry.notAfter < block.timestamp (expired)", async function () {

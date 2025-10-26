@@ -14,6 +14,11 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "./UniversalSigValidator.sol";
 
+// Timestamp Range Semantics:
+// - notBefore: INCLUSIVE - valid starting at exactly this timestamp (notBefore <= block.timestamp)
+// - notAfter: EXCLUSIVE - NOT valid at exactly this timestamp (block.timestamp < notAfter)
+// - Valid time range: [notBefore, notAfter)
+
 struct AuthorizationScope {
     address user;
     uint48 totalAmount;
@@ -157,7 +162,7 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            if (uint48(block.timestamp) <= state.notAfter || state.nonce == 0) {
+            if (uint48(block.timestamp) < state.notAfter || state.nonce == 0) {
                 continue;
             }
             if (state.remainingAmount > 0) {
@@ -202,7 +207,7 @@ contract ZeroLC is
             "Invalid scope signature"
         );
         require(
-            scope.notAfter > block.timestamp,
+            block.timestamp < scope.notAfter,
             "Authorization scope expired"
         );
         require(
@@ -323,7 +328,7 @@ contract ZeroLC is
                 scopeHash
             ];
             require(
-                state.notAfter > block.timestamp,
+                block.timestamp < state.notAfter,
                 "Authorization scope expired"
             );
             require(
@@ -336,7 +341,7 @@ contract ZeroLC is
                 ChargeEntry memory entry = chargeBatch.entries[j];
                 require(entry.nonce == nonce, "Invalid nonce");
                 require(
-                    entry.notAfter >= block.timestamp,
+                    block.timestamp < entry.notAfter,
                     "Charge entry expired"
                 );
                 require(
@@ -507,7 +512,7 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            if (state.notAfter > block.timestamp) {
+            if (block.timestamp < state.notAfter) {
                 continue;
             }
             balance += state.remainingAmount;

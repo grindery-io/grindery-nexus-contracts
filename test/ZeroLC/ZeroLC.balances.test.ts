@@ -426,7 +426,7 @@ describe("ZeroLC - Balance View Functions", function () {
       // Move to exact expiration time
       await time.increaseTo(currentTime + 100);
 
-      // At exact boundary, scope IS expired (notAfter > block.timestamp is false when notAfter == block.timestamp)
+      // At exact boundary, scope IS expired (notAfter is EXCLUSIVE: block.timestamp < notAfter is false when notAfter == block.timestamp)
       // So unlocked includes the expired scope amount
       const unlockedBalance = await zeroLC.unlockedBalanceOf(user1.address);
       expect(unlockedBalance).to.equal(500n); // Free balance + expired scope
