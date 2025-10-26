@@ -2,6 +2,49 @@
 
 pragma solidity 0.8.30;
 
+// Revert String to Typed Error Mapping
+// Use this table to update tests after converting to typed errors
+//
+// "Invalid gas token address" -> InvalidGasTokenAddress
+// "Invalid universal sig validator address" -> InvalidUniversalSigValidatorAddress
+// "Invalid scope signature" -> InvalidScopeSignature
+// "Authorization scope expired" -> AuthorizationScopeExpired
+// "Authorization scope not yet active" -> AuthorizationScopeNotYetActive
+// "Authorization scope total amount must be greater than 0" -> InvalidTotalAmount
+// "Authorization scope dispute window must be greater than 0" -> InvalidDisputeWindow
+// "Authorization scope agent address must be non-zero" -> InvalidAgentAddress
+// "User cannot be their own agent" -> UserCannotBeOwnAgent
+// "Insufficient balance" -> InsufficientBalance
+// "Authorization scope already registered" -> ScopeAlreadyRegistered
+// "Authorization scope is not active" -> ScopeNotActive
+// "Authorization scope is already exhausted" -> ScopeAlreadyExhausted
+// "No charges in batch" -> EmptyChargeBatch
+// "Invalid signature" -> InvalidAgentSignature
+// "Invalid batch length" -> InvalidBatchLength
+// "Invalid batch timestamp (must be within 1 minute)" -> BatchTimestampOutOfRange
+// "Invalid batch timestamp (must be greater than last charge timestamp)" -> BatchTimestampNotIncreasing
+// "Invalid nonce" -> InvalidNonce
+// "Charge entry expired" -> ChargeEntryExpired
+// "Charge amount must be greater than 0" -> InvalidChargeAmount
+// "Dispute window expired" -> DisputeWindowExpired
+// "Future charge batch" -> FutureChargeBatch
+// "Invalid dispute signature" -> InvalidDisputeSignature
+// "Invalid amount to clawback" -> InvalidClawbackAmount
+// "amountToClawback must be less than total charged amount in the batch" -> ClawbackExceedsBatchTotal
+// "Dispute already exists" -> DisputeAlreadyExists
+// "UNEXPECTED: No balance to clawback" -> InsufficientPendingBalance
+// "Invalid user address" -> InvalidUserAddress
+// "Deposit amount must be greater than zero" -> InvalidDepositAmount
+// "Invalid deposit signature" -> InvalidDepositSignature
+// "Cannot deposit to self" -> CannotDepositToSelf
+// "Caller is not the agent" -> CallerNotAgent
+// "Invalid withdrawal signature" -> InvalidWithdrawalSignature
+// "Scope mismatch" -> ScopeMismatch
+// "Charge batch still in dispute window" -> BatchStillInDisputeWindow
+// "Non-continuous nonce sequence" -> NonContinuousNonceSequence
+// "Provided charges exceed pending amount" -> ChargesExceedPendingAmount
+// "No withdrawable balance" -> NoWithdrawableBalance
+
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
@@ -82,6 +125,47 @@ contract ZeroLC is
 {
     using SafeERC20 for IERC20;
 
+    // Custom errors
+    error InvalidGasTokenAddress();
+    error InvalidUniversalSigValidatorAddress();
+    error InvalidScopeSignature();
+    error AuthorizationScopeExpired();
+    error AuthorizationScopeNotYetActive();
+    error InvalidTotalAmount();
+    error InvalidDisputeWindow();
+    error InvalidAgentAddress();
+    error UserCannotBeOwnAgent();
+    error InsufficientBalance();
+    error ScopeAlreadyRegistered();
+    error ScopeNotActive();
+    error ScopeAlreadyExhausted();
+    error EmptyChargeBatch();
+    error InvalidAgentSignature();
+    error InvalidBatchLength();
+    error BatchTimestampOutOfRange();
+    error BatchTimestampNotIncreasing();
+    error InvalidNonce();
+    error ChargeEntryExpired();
+    error InvalidChargeAmount();
+    error DisputeWindowExpired();
+    error FutureChargeBatch();
+    error InvalidDisputeSignature();
+    error ClawbackExceedsBatchTotal();
+    error DisputeAlreadyExists();
+    error InsufficientPendingBalance();
+    error InvalidClawbackAmount();
+    error InvalidUserAddress();
+    error InvalidDepositAmount();
+    error InvalidDepositSignature();
+    error CannotDepositToSelf();
+    error CallerNotAgent();
+    error InvalidWithdrawalSignature();
+    error ScopeMismatch();
+    error BatchStillInDisputeWindow();
+    error NonContinuousNonceSequence();
+    error ChargesExceedPendingAmount();
+    error NoWithdrawableBalance();
+
     bytes32 public constant ROLE_OPERATOR = keccak256("ROLE_OPERATOR");
 
     event Deposit(address indexed user, uint256 amount);
@@ -132,11 +216,8 @@ contract ZeroLC is
         address _gasToken,
         address _universalSigValidator
     ) EIP712("ZeroLC", "1") {
-        require(_gasToken != address(0), "Invalid gas token address");
-        require(
-            _universalSigValidator != address(0),
-            "Invalid universal sig validator address"
-        );
+        require(_gasToken != address(0), InvalidGasTokenAddress());
+        require(_universalSigValidator != address(0), InvalidUniversalSigValidatorAddress());
         gasToken = IERC20(_gasToken);
         universalSigValidator = UniversalSigValidator(_universalSigValidator);
         _disableInitializers();
@@ -207,31 +288,13 @@ contract ZeroLC is
                 )
             )
         );
-        require(
-            universalSigValidator.isValidSig(scope.user, digest, signature),
-            "Invalid scope signature"
-        );
-        require(
-            block.timestamp < scope.notAfter,
-            "Authorization scope expired"
-        );
-        require(
-            scope.notBefore <= block.timestamp,
-            "Authorization scope not yet active"
-        );
-        require(
-            scope.totalAmount > 0,
-            "Authorization scope total amount must be greater than 0"
-        );
-        require(
-            scope.disputeWindow > 0,
-            "Authorization scope dispute window must be greater than 0"
-        );
-        require(
-            scope.agent != address(0),
-            "Authorization scope agent address must be non-zero"
-        );
-        require(scope.user != scope.agent, "User cannot be their own agent");
+        require(universalSigValidator.isValidSig(scope.user, digest, signature), InvalidScopeSignature());
+        require(block.timestamp < scope.notAfter, AuthorizationScopeExpired());
+        require(scope.notBefore <= block.timestamp, AuthorizationScopeNotYetActive());
+        require(scope.totalAmount > 0, InvalidTotalAmount());
+        require(scope.disputeWindow > 0, InvalidDisputeWindow());
+        require(scope.agent != address(0), InvalidAgentAddress());
+        require(scope.user != scope.agent, UserCannotBeOwnAgent());
         compactUserAuthorizationStates(scope.user);
         UserState storage userState = userStates[scope.user];
         if (scope.totalAmount > userState.balance) {
@@ -242,12 +305,9 @@ contract ZeroLC is
                 _depositInternal(scope.user, amountNeeded);
             }
         }
-        require(scope.totalAmount <= userState.balance, "Insufficient balance");
+        require(scope.totalAmount <= userState.balance, InsufficientBalance());
         bytes32 scopeHash = getScopeHash(scope);
-        require(
-            authorizationScopes[scopeHash].notAfter == 0,
-            "Authorization scope already registered"
-        );
+        require(authorizationScopes[scopeHash].notAfter == 0, ScopeAlreadyRegistered());
         authorizationScopes[scopeHash] = AuthorizationScopeState({
             remainingAmount: scope.totalAmount,
             agentPendingAmount: 0,
@@ -276,20 +336,11 @@ contract ZeroLC is
                 )
             )
         );
-        require(
-            universalSigValidator.isValidSig(scope.user, digest, signature),
-            "Invalid scope signature"
-        );
+        require(universalSigValidator.isValidSig(scope.user, digest, signature), InvalidScopeSignature());
         uint48 newNotAfter = uint48(block.timestamp) + 300;
         AuthorizationScopeState memory state = authorizationScopes[scopeHash];
-        require(
-            state.notAfter > newNotAfter,
-            "Authorization scope is not active"
-        );
-        require(
-            state.remainingAmount > 0,
-            "Authorization scope is already exhausted"
-        );
+        require(state.notAfter > newNotAfter, ScopeNotActive());
+        require(state.remainingAmount > 0, ScopeAlreadyExhausted());
         state.notAfter = newNotAfter;
         authorizationScopes[scopeHash] = state;
         emit AuthorizationScopeRevoking(scope.user, scope.agent, scopeHash);
@@ -302,7 +353,7 @@ contract ZeroLC is
             abi.encode(_domainSeparatorV4(), chargeBatch.scope)
         );
         uint numCharges = chargeBatch.entries.length;
-        require(numCharges > 0, "No charges in batch");
+        require(numCharges > 0, EmptyChargeBatch());
         ChargeBatchVerifier memory verifier;
         if (numCharges > 1) {
             verifier.batchPartHash = keccak256(
@@ -316,49 +367,37 @@ contract ZeroLC is
                 MessageHashUtils.toEthSignedMessageHash(abi.encode(verifier)),
                 chargeBatch.agentSignature
             ) == chargeBatch.scope.agent,
-            "Invalid signature"
+            InvalidAgentSignature()
         );
     }
 
     function settleCharges(ChargeBatch[] calldata chargeBatches) external {
-        require(chargeBatches.length > 0, "Invalid batch length");
+        require(chargeBatches.length > 0, InvalidBatchLength());
         for (uint256 i = 0; i < chargeBatches.length; i++) {
             ChargeBatch calldata chargeBatch = chargeBatches[i];
             bytes32 scopeHash = verifyChargeBatchSignature(chargeBatch);
             require(
                 chargeBatch.timestamp > block.timestamp - 60 &&
                     chargeBatch.timestamp <= block.timestamp,
-                "Invalid batch timestamp (must be within 1 minute)"
+                BatchTimestampOutOfRange()
             );
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            require(
-                block.timestamp < state.notAfter,
-                "Authorization scope expired"
-            );
-            require(
-                chargeBatch.timestamp > state.lastChargeTimestamp,
-                "Invalid batch timestamp (must be greater than last charge timestamp)"
-            );
+            require(block.timestamp < state.notAfter, AuthorizationScopeExpired());
+            require(chargeBatch.timestamp > state.lastChargeTimestamp, BatchTimestampNotIncreasing());
             uint48 totalAmount = 0;
             uint24 nonce = state.nonce;
             for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
                 ChargeEntry memory entry = chargeBatch.entries[j];
-                require(entry.nonce == nonce, "Invalid nonce");
-                require(
-                    block.timestamp < entry.notAfter,
-                    "Charge entry expired"
-                );
-                require(
-                    entry.amount > 0,
-                    "Charge amount must be greater than 0"
-                );
+                require(entry.nonce == nonce, InvalidNonce());
+                require(block.timestamp < entry.notAfter, ChargeEntryExpired());
+                require(entry.amount > 0, InvalidChargeAmount());
                 totalAmount += entry.amount;
                 nonce += 1;
             }
             uint48 remainingAmount = state.remainingAmount;
-            require(totalAmount <= remainingAmount, "Insufficient balance");
+            require(totalAmount <= remainingAmount, InsufficientBalance());
             authorizationScopes[scopeHash] = AuthorizationScopeState({
                 remainingAmount: remainingAmount - totalAmount,
                 agentPendingAmount: state.agentPendingAmount + totalAmount,
@@ -378,21 +417,18 @@ contract ZeroLC is
     }
 
     function dispute(Dispute[] calldata disputes) external {
-        require(disputes.length > 0, "Invalid batch length");
+        require(disputes.length > 0, InvalidBatchLength());
         for (uint256 i = 0; i < disputes.length; i++) {
             Dispute calldata d = disputes[i];
-            require(d.amountToClawback > 0, "Invalid amount to clawback");
+            require(d.amountToClawback > 0, InvalidClawbackAmount());
             ChargeBatch calldata chargeBatch = d.chargeBatch;
             bytes32 scopeHash = verifyChargeBatchSignature(chargeBatch);
             require(
                 block.timestamp - chargeBatch.timestamp <
                     chargeBatch.scope.disputeWindow,
-                "Dispute window expired"
+                DisputeWindowExpired()
             );
-            require(
-                chargeBatch.timestamp <= block.timestamp,
-                "Future charge batch"
-            );
+            require(chargeBatch.timestamp <= block.timestamp, FutureChargeBatch());
             bytes32 digest = _hashTypedDataV4(
                 keccak256(
                     abi.encode(
@@ -410,17 +446,14 @@ contract ZeroLC is
                     digest,
                     d.signature
                 ),
-                "Invalid dispute signature"
+                InvalidDisputeSignature()
             );
             uint48 totalChargedAmount = 0;
             for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
                 ChargeEntry memory entry = chargeBatch.entries[j];
                 totalChargedAmount += entry.amount;
             }
-            require(
-                totalChargedAmount >= d.amountToClawback,
-                "amountToClawback must be less than total charged amount in the batch"
-            );
+            require(totalChargedAmount >= d.amountToClawback, ClawbackExceedsBatchTotal());
             bytes32 disputeHash = keccak256(
                 abi.encode(
                     chargeBatch.scope,
@@ -428,14 +461,11 @@ contract ZeroLC is
                     chargeBatch.timestamp
                 )
             );
-            require(!disputedCharges[disputeHash], "Dispute already exists");
+            require(!disputedCharges[disputeHash], DisputeAlreadyExists());
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            require(
-                state.agentPendingAmount >= d.amountToClawback,
-                "UNEXPECTED: No balance to clawback"
-            );
+            require(state.agentPendingAmount >= d.amountToClawback, InsufficientPendingBalance());
             state.agentPendingAmount -= d.amountToClawback;
             state.notAfter = uint48(block.timestamp);
             authorizationScopes[scopeHash] = state;
@@ -453,8 +483,8 @@ contract ZeroLC is
     }
 
     function _depositInternal(address user, uint256 amount) private {
-        require(user != address(0), "Invalid user address");
-        require(amount > 0, "Deposit amount must be greater than zero");
+        require(user != address(0), InvalidUserAddress());
+        require(amount > 0, InvalidDepositAmount());
         gasToken.safeTransferFrom(user, address(this), amount);
         userStates[user].balance += amount;
         emit Deposit(user, amount);
@@ -476,17 +506,14 @@ contract ZeroLC is
                 )
             )
         );
-        require(
-            universalSigValidator.isValidSig(user, digest, signature),
-            "Invalid deposit signature"
-        );
+        require(universalSigValidator.isValidSig(user, digest, signature), InvalidDepositSignature());
         userStates[user].nonce = nonce + 1;
         _depositInternal(user, amount);
     }
 
     function deposit(uint256 amount) external nonReentrant {
         address user = msg.sender;
-        require(user != address(this), "Cannot deposit to self");
+        require(user != address(this), CannotDepositToSelf());
         _depositInternal(user, amount);
     }
 
@@ -540,7 +567,7 @@ contract ZeroLC is
         ChargeBatch[] calldata recentCharges
     ) external nonReentrant {
         bytes32 scopeHash = getScopeHash(scope);
-        require(msg.sender == scope.agent, "Caller is not the agent");
+        require(msg.sender == scope.agent, CallerNotAgent());
         _withdrawAgentChargedFundInternal(scope, scopeHash, toWallet, recentCharges);
     }
 
@@ -567,10 +594,7 @@ contract ZeroLC is
             )
         );
 
-        require(
-            universalSigValidator.isValidSig(scope.agent, digest, signature),
-            "Invalid withdrawal signature"
-        );
+        require(universalSigValidator.isValidSig(scope.agent, digest, signature), InvalidWithdrawalSignature());
 
         userStates[scope.agent].nonce = nonce + 1;
         _withdrawAgentChargedFundInternal(scope, scopeHash, toWallet, recentCharges);
@@ -651,15 +675,15 @@ contract ZeroLC is
             verifyChargeBatchSignature(batch);
 
             // Verify batch scope matches
-            require(getScopeHash(batch.scope) == scopeHash, "Scope mismatch");
+            require(getScopeHash(batch.scope) == scopeHash, ScopeMismatch());
 
             // Verify batch timestamp is valid (not in future)
-            require(batch.timestamp <= block.timestamp, "Future charge batch");
+            require(batch.timestamp <= block.timestamp, FutureChargeBatch());
 
             // Reject if this batch is still within dispute window
             require(
                 batch.timestamp <= block.timestamp - scope.disputeWindow,
-                "Charge batch still in dispute window"
+                BatchStillInDisputeWindow()
             );
 
             // Process each entry in the batch
@@ -668,7 +692,7 @@ contract ZeroLC is
                 uint24 entryNonce = uint24(entry.nonce);
 
                 // Verify nonce continuity - must be sequential with no gaps
-                require(entryNonce == expectedNonce, "Non-continuous nonce sequence");
+                require(entryNonce == expectedNonce, NonContinuousNonceSequence());
 
                 totalWithdrawableCharges += entry.amount;
 
@@ -680,10 +704,7 @@ contract ZeroLC is
         }
 
         // Verify that total provided charges don't exceed pending amount
-        require(
-            totalWithdrawableCharges <= state.agentPendingAmount,
-            "Provided charges exceed pending amount"
-        );
+        require(totalWithdrawableCharges <= state.agentPendingAmount, ChargesExceedPendingAmount());
 
         // All provided charges are withdrawable (since all are past dispute window)
         withdrawable = totalWithdrawableCharges;
@@ -719,7 +740,7 @@ contract ZeroLC is
             );
         }
 
-        require(withdrawable > 0, "No withdrawable balance");
+        require(withdrawable > 0, NoWithdrawableBalance());
 
         // Update state
         state.agentPendingAmount -= withdrawable;

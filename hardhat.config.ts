@@ -321,6 +321,9 @@ const config: HardhatUserConfig = {
     format: "json",
     except: ["Ownable.sol", "ECDSA.sol", "EIP712.sol"],
   },
+  gasReporter: {
+    enabled: process.env.REPORT_GAS ? true : false,
+  },
 };
 
 export default config;

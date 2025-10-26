@@ -491,7 +491,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid signature");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should revert with wrong agent signing", async function () {
@@ -510,7 +510,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid signature");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should settle with single entry (batchPartHash == 0x00)", async function () {
@@ -572,7 +572,7 @@ describe("ZeroLC - Charge Settlement", function () {
       chargeBatch.entries[0].amount = 9999n;
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid signature");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should revert with tampered lastEntry", async function () {
@@ -593,7 +593,7 @@ describe("ZeroLC - Charge Settlement", function () {
       chargeBatch.entries[0].amount = 9999n;
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid signature");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should revert with tampered scopeHash", async function () {
@@ -617,7 +617,7 @@ describe("ZeroLC - Charge Settlement", function () {
       chargeBatch.scope = scope2;
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid signature");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
 
     it("should use correct verifier struct encoding", async function () {
@@ -680,7 +680,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ], pastTime);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid batch timestamp (must be within 1 minute)");
+        .to.be.revertedWithCustomError(zeroLC, "BatchTimestampOutOfRange");
     });
 
     it("should settle with timestamp within 59 seconds window (boundary)", async function () {
@@ -740,7 +740,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ], pastTime);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid batch timestamp (must be within 1 minute)");
+        .to.be.revertedWithCustomError(zeroLC, "BatchTimestampOutOfRange");
     });
 
     it("should revert with timestamp > block.timestamp", async function () {
@@ -760,7 +760,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ], futureTime);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid batch timestamp (must be within 1 minute)");
+        .to.be.revertedWithCustomError(zeroLC, "BatchTimestampOutOfRange");
     });
 
     it("should revert with timestamp <= lastChargeTimestamp", async function () {
@@ -785,7 +785,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ], currentTime);
 
       await expect(zeroLC.settleCharges([batch2]))
-        .to.be.revertedWith("Invalid batch timestamp (must be greater than last charge timestamp)");
+        .to.be.revertedWithCustomError(zeroLC, "BatchTimestampNotIncreasing");
     });
 
     it("should settle with timestamp == lastChargeTimestamp + 1 (boundary)", async function () {
@@ -892,7 +892,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid nonce");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
     });
 
     it("should revert with skipped nonce", async function () {
@@ -912,7 +912,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Invalid nonce");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
     });
 
     it("should revert with repeated nonce", async function () {
@@ -939,7 +939,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ], laterTime);
 
       await expect(zeroLC.settleCharges([batch2]))
-        .to.be.revertedWith("Invalid nonce");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
     });
 
     it("should settle multiple batches incrementing nonces correctly", async function () {
@@ -1088,7 +1088,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Insufficient balance");
+        .to.be.revertedWithCustomError(zeroLC, "InsufficientBalance");
     });
 
     it("should revert with zero amount entries", async function () {
@@ -1106,7 +1106,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Charge amount must be greater than 0");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidChargeAmount");
     });
 
     it("should settle with uint48 max amount (overflow check)", async function () {
@@ -1144,7 +1144,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Charge amount must be greater than 0");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidChargeAmount");
     });
   });
 
@@ -1206,7 +1206,7 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // notAfter is EXCLUSIVE, so entry.notAfter == block.timestamp means expired
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Charge entry expired");
+        .to.be.revertedWithCustomError(zeroLC, "ChargeEntryExpired");
     });
 
     it("should revert with entry.notAfter < block.timestamp (expired)", async function () {
@@ -1224,7 +1224,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Charge entry expired");
+        .to.be.revertedWithCustomError(zeroLC, "ChargeEntryExpired");
     });
 
     it("should settle multiple entries with different notAfter values", async function () {
@@ -1287,7 +1287,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ], laterTime);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Authorization scope expired");
+        .to.be.revertedWithCustomError(zeroLC, "AuthorizationScopeExpired");
     });
 
     it("should revert with scope notAfter == block.timestamp", async function () {
@@ -1310,7 +1310,7 @@ describe("ZeroLC - Charge Settlement", function () {
       ], expirationTime);
 
       await expect(zeroLC.settleCharges([chargeBatch]))
-        .to.be.revertedWith("Authorization scope expired");
+        .to.be.revertedWithCustomError(zeroLC, "AuthorizationScopeExpired");
     });
 
     it("should settle with scope notAfter == block.timestamp + 1 (boundary)", async function () {
@@ -1342,7 +1342,7 @@ describe("ZeroLC - Charge Settlement", function () {
       const { zeroLC } = await loadFixture(deployZeroLCFixture);
 
       await expect(zeroLC.settleCharges([]))
-        .to.be.revertedWith("Invalid batch length");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidBatchLength");
     });
 
     it("should revert with batch containing empty entries array", async function () {
@@ -1364,7 +1364,7 @@ describe("ZeroLC - Charge Settlement", function () {
       };
 
       await expect(zeroLC.settleCharges([emptyBatch]))
-        .to.be.revertedWith("No charges in batch");
+        .to.be.revertedWithCustomError(zeroLC, "EmptyChargeBatch");
     });
 
     it("should verify non-empty entries in verifyChargeBatchSignature", async function () {

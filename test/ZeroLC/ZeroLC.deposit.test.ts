@@ -97,7 +97,7 @@ describe("ZeroLC - Direct Deposit (no signature)", function () {
 
       await expect(
         zeroLC.connect(user1)["deposit(uint256)"](0)
-      ).to.be.revertedWith("Deposit amount must be greater than zero");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositAmount");
     });
   });
 
@@ -471,7 +471,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           depositAmount,
           signature
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
     });
 
     it("should revert with malformed signature", async function () {
@@ -517,7 +517,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           actualAmount,
           signature
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
     });
 
     it("should revert when signature is for different user", async function () {
@@ -541,7 +541,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           depositAmount,
           signature
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
     });
   });
 
@@ -634,7 +634,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           depositAmount,
           signature
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
     });
 
     it("should reject signature with wrong domain version", async function () {
@@ -679,7 +679,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           depositAmount,
           signature
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
     });
   });
 
@@ -873,7 +873,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           depositAmount,
           signature
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
     });
   });
 
@@ -976,7 +976,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           depositAmount,
           signature
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
 
       // Balance should remain the same (only one deposit succeeded)
       expect(await zeroLC.balanceOf(user1.address)).to.equal(depositAmount);
@@ -1028,7 +1028,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           depositAmount,
           signature
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
     });
 
     it("should reject signature with old nonce", async function () {
@@ -1066,7 +1066,7 @@ describe("ZeroLC - Deposit with Signature", function () {
           depositAmount,
           signature0
         )
-      ).to.be.revertedWith("Invalid deposit signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDepositSignature");
     });
   });
 });

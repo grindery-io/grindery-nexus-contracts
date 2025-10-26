@@ -219,8 +219,9 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       const scopeHash = await zeroLC.getScopeHash(scope);
       const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
 
-      await expect(zeroLC.revokeAuthorizationScope(scope, revSignature)).to.be.revertedWith(
-        "Authorization scope is not active"
+      await expect(zeroLC.revokeAuthorizationScope(scope, revSignature)).to.be.revertedWithCustomError(
+        zeroLC,
+        "ScopeNotActive"
       );
     });
 
@@ -356,7 +357,7 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
 
       await expect(
         zeroLC.revokeAuthorizationScope(scope, badSignature)
-      ).to.be.revertedWith("Invalid scope signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidScopeSignature");
     });
 
     it("should revert when revoking already expired scope", async function () {
@@ -385,7 +386,7 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
 
       await expect(
         zeroLC.revokeAuthorizationScope(scope, revSignature)
-      ).to.be.revertedWith("Authorization scope is not active");
+      ).to.be.revertedWithCustomError(zeroLC, "ScopeNotActive");
     });
 
     it("should revert when revoking scope with remainingAmount == 0", async function () {
@@ -416,7 +417,7 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       // Should fail because newNotAfter (currentTime + 300) >= notAfter (currentTime + 300)
       await expect(
         zeroLC.revokeAuthorizationScope(scope, revSignature)
-      ).to.be.revertedWith("Authorization scope is not active");
+      ).to.be.revertedWithCustomError(zeroLC, "ScopeNotActive");
     });
 
     it("should revert when revoking scope twice", async function () {
@@ -436,7 +437,7 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
 
       await expect(
         zeroLC.revokeAuthorizationScope(scope, revSignature2)
-      ).to.be.revertedWith("Authorization scope is not active");
+      ).to.be.revertedWithCustomError(zeroLC, "ScopeNotActive");
     });
 
     it("should revert with malformed signature", async function () {
@@ -475,7 +476,7 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
 
       await expect(
         zeroLC.revokeAuthorizationScope(scope, revSignature)
-      ).to.be.revertedWith("Authorization scope is not active");
+      ).to.be.revertedWithCustomError(zeroLC, "ScopeNotActive");
     });
   });
 

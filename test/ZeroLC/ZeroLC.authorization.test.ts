@@ -493,7 +493,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       // Attempt to register the exact same scope again - should revert
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Authorization scope already registered");
+      ).to.be.revertedWithCustomError(zeroLC, "ScopeAlreadyRegistered");
     });
   });
 
@@ -512,7 +512,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Insufficient balance");
+      ).to.be.revertedWithCustomError(zeroLC, "InsufficientBalance");
     });
 
     it("should revert when registering scope with invalid signature", async function () {
@@ -546,7 +546,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, wrongSignature)
-      ).to.be.revertedWith("Invalid scope signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidScopeSignature");
     });
 
     it("should revert when registering scope with expired notAfter", async function () {
@@ -588,7 +588,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Authorization scope expired");
+      ).to.be.revertedWithCustomError(zeroLC, "AuthorizationScopeExpired");
     });
 
     it("should revert when registering scope with notBefore in future", async function () {
@@ -630,7 +630,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Authorization scope not yet active");
+      ).to.be.revertedWithCustomError(zeroLC, "AuthorizationScopeNotYetActive");
     });
 
     it("should revert when registering scope with zero totalAmount", async function () {
@@ -641,7 +641,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Authorization scope total amount must be greater than 0");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidTotalAmount");
     });
 
     it("should revert when registering scope with zero disputeWindow", async function () {
@@ -683,7 +683,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Authorization scope dispute window must be greater than 0");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidDisputeWindow");
     });
 
     it("should revert when registering scope with zero agent address", async function () {
@@ -725,7 +725,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Authorization scope agent address must be non-zero");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidAgentAddress");
     });
 
     it("should revert when user == agent (self-dealing)", async function () {
@@ -767,7 +767,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("User cannot be their own agent");
+      ).to.be.revertedWithCustomError(zeroLC, "UserCannotBeOwnAgent");
     });
 
     it("should register scope at exact notBefore timestamp (boundary)", async function () {
@@ -886,7 +886,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Insufficient balance");
+      ).to.be.revertedWithCustomError(zeroLC, "InsufficientBalance");
     });
 
     it("should be protected against reentrancy during registration", async function () {
@@ -1000,7 +1000,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       // Should fail because signature was for user1, not user2
       await expect(
         zeroLC.registerAuthorizationScope(tamperedScope, signature)
-      ).to.be.revertedWith("Invalid scope signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidScopeSignature");
     });
 
     it("should fail verification with tampered totalAmount", async function () {
@@ -1045,7 +1045,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(tamperedScope, signature)
-      ).to.be.revertedWith("Invalid scope signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidScopeSignature");
     });
 
     it("should fail verification with tampered disputeWindow", async function () {
@@ -1090,7 +1090,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(tamperedScope, signature)
-      ).to.be.revertedWith("Invalid scope signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidScopeSignature");
     });
 
     it("should fail verification with tampered agent", async function () {
@@ -1135,7 +1135,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(tamperedScope, signature)
-      ).to.be.revertedWith("Invalid scope signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidScopeSignature");
     });
 
     it("should fail verification with tampered notBefore", async function () {
@@ -1180,7 +1180,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(tamperedScope, signature)
-      ).to.be.revertedWith("Invalid scope signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidScopeSignature");
     });
 
     it("should fail verification with tampered notAfter", async function () {
@@ -1225,7 +1225,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       await expect(
         zeroLC.registerAuthorizationScope(tamperedScope, signature)
-      ).to.be.revertedWith("Invalid scope signature");
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidScopeSignature");
     });
   });
 
@@ -1282,7 +1282,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       // Should fail because auto-deposit won't trigger with insufficient allowance
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Insufficient balance");
+      ).to.be.revertedWithCustomError(zeroLC, "InsufficientBalance");
     });
 
     it("should not auto-deposit when balance < totalAmount but token balance insufficient", async function () {
@@ -1308,7 +1308,7 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       // Should fail because user doesn't have enough tokens for auto-deposit
       await expect(
         zeroLC.registerAuthorizationScope(scope, signature)
-      ).to.be.revertedWith("Insufficient balance");
+      ).to.be.revertedWithCustomError(zeroLC, "InsufficientBalance");
     });
 
     it("should auto-deposit exact amount needed (totalAmount - balance)", async function () {

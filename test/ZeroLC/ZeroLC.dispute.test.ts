@@ -555,7 +555,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT);
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("Dispute window expired");
+        .to.be.revertedWithCustomError(zeroLC, "DisputeWindowExpired");
     });
 
     it("should dispute with very short dispute window (10 seconds)", async function () {
@@ -665,7 +665,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       // Try to dispute the same batch again
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("Dispute already exists");
+        .to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
     });
   });
 
@@ -698,7 +698,7 @@ describe("ZeroLC - Dispute Tests", function () {
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT, thirdParty);
 
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("Invalid dispute signature");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidDisputeSignature");
     });
 
     it("should revert dispute with tampered amountToClawback", async function () {
@@ -712,7 +712,7 @@ describe("ZeroLC - Dispute Tests", function () {
       dispute.amountToClawback = CHARGE_AMOUNT / BigInt(2);
 
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("Invalid dispute signature");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidDisputeSignature");
     });
 
     it("should revert dispute with tampered scopeHash", async function () {
@@ -898,7 +898,7 @@ describe("ZeroLC - Dispute Tests", function () {
       const dispute = await createDispute(chargeBatch, scopeHash, excessiveAmount);
 
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("amountToClawback must be less than total charged amount in the batch");
+        .to.be.revertedWithCustomError(zeroLC, "ClawbackExceedsBatchTotal");
     });
 
     it("should revert dispute with amountToClawback > agentPendingAmount", async function () {
@@ -923,7 +923,7 @@ describe("ZeroLC - Dispute Tests", function () {
       const duplicateDispute = await createDispute(chargeBatch, scopeHash, scopeState.agentPendingAmount + BigInt(1));
 
       await expect(zeroLC.dispute([duplicateDispute]))
-        .to.be.revertedWith("Dispute already exists");
+        .to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
     });
 
     it("should revert dispute with zero amountToClawback", async function () {
@@ -934,7 +934,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       // Zero clawback should be rejected
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("Invalid amount to clawback");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidClawbackAmount");
     });
 
     it("should calculate totalChargedAmount correctly from entries", async function () {
@@ -998,7 +998,7 @@ describe("ZeroLC - Dispute Tests", function () {
       // Try to dispute more than total - this should fail with amount validation error first
       const excessDispute = await createDispute(chargeBatch, scopeHash, totalAmount + BigInt(1));
       await expect(zeroLC.dispute([excessDispute]))
-        .to.be.revertedWith("amountToClawback must be less than total charged amount in the batch");
+        .to.be.revertedWithCustomError(zeroLC, "ClawbackExceedsBatchTotal");
     });
   });
 
@@ -1018,7 +1018,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       // Second dispute should fail
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("Dispute already exists");
+        .to.be.revertedWithCustomError(zeroLC, "DisputeAlreadyExists");
     });
 
     it("should verify dispute hash calculation is unique per batch", async function () {
@@ -1219,7 +1219,7 @@ describe("ZeroLC - Dispute Tests", function () {
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT);
 
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("Invalid signature");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidAgentSignature");
     });
   });
 
@@ -1343,7 +1343,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
     it("should revert dispute with empty disputes array", async function () {
       await expect(zeroLC.dispute([]))
-        .to.be.revertedWith("Invalid batch length");
+        .to.be.revertedWithCustomError(zeroLC, "InvalidBatchLength");
     });
 
     it("should verify dispute validates non-empty charge batch entries", async function () {
@@ -1374,7 +1374,7 @@ describe("ZeroLC - Dispute Tests", function () {
       const dispute = await createDispute(chargeBatch, scopeHash, CHARGE_AMOUNT);
 
       await expect(zeroLC.dispute([dispute]))
-        .to.be.revertedWith("No charges in batch");
+        .to.be.revertedWithCustomError(zeroLC, "EmptyChargeBatch");
     });
   });
 });
