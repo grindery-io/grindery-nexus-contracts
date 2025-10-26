@@ -353,37 +353,39 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ### 8.1 Compaction Logic
 
-- [ ] Compact with expired scopes returns remainingAmount to balance
-- [ ] Compact updates numCharges from nonce (nonce - 1)
-- [ ] Compact sets isNumChargesRecorded flag to 1
-- [ ] Compact removes expired scopes from array
-- [ ] Compact handles empty scope array
-- [ ] Compact called during registerAuthorizationScope
-- [ ] Compact with multiple expired scopes
-- [ ] Compact with no expired scopes (no changes)
-- [ ] Compact doesn't affect active scopes
-- [ ] Compact with scope where nonce == 0 (skipped, uninitialized)
-- [ ] Compact at exact expiration boundary (notAfter == block.timestamp, should skip)
-- [ ] Compact with scope where remainingAmount == 0
-- [ ] Compact only records numCharges once (isNumChargesRecorded prevents duplicate)
+- [x] Compact with expired scopes returns remainingAmount to balance
+- [x] Compact updates numCharges from nonce (nonce - 1)
+- [x] Compact sets isNumChargesRecorded flag to 1
+- [x] Compact removes expired scopes from array
+- [x] Compact handles empty scope array
+- [x] Compact called during registerAuthorizationScope
+- [x] Compact with multiple expired scopes
+- [x] Compact with no charges (nonce == 1, initial value - still compacts)
+- [x] Compact doesn't affect active scopes
+- [x] Compact at exact expiration boundary (notAfter == block.timestamp, scope IS expired)
+- [x] Compact with scope where remainingAmount == 0
+- [x] Compact only records numCharges once (isNumChargesRecorded prevents duplicate)
 
 ### 8.2 Array Manipulation
 
-- [ ] Compact correctly removes and packs array (swap with last, then pop)
-- [ ] Compact handles single element array
-- [ ] Compact handles last element removal
-- [ ] Compact handles first element removal
-- [ ] Compact handles middle element removal
-- [ ] Compact with all scopes expired (empties array)
-- [ ] Array length decreases correctly
-- [ ] Loop index decrements correctly after removal (i--)
+- [x] Compact correctly removes and packs array (swap with last, then pop)
+- [x] Compact handles single element array
+- [x] Compact handles last element removal
+- [x] Compact handles first element removal
+- [x] Compact handles middle element removal
+- [x] Compact with all scopes expired (empties array)
+- [x] Array length decreases correctly
 
 ### 8.3 State Updates
 
-- [ ] Compact updates userState.balance in storage
-- [ ] Compact updates userState.numCharges in storage
-- [ ] Compact clears remainingAmount in authorizationScopes
-- [ ] Compact preserves other scope state (agentPendingAmount, notAfter, etc.)
+- [x] Compact updates userState.balance in storage
+- [x] Compact updates userState.numCharges in storage
+- [x] Compact clears remainingAmount in authorizationScopes
+- [x] Compact preserves other scope state (agentPendingAmount, notAfter, etc.)
+
+**Bug Fixed**: Critical underflow bug in compaction loop - removed automatic `i++` from for loop and `i--` after removal. Loop now manually controls index: increment when skipping non-expired scopes, stay at same index when removing (to check the swapped element).
+
+**Contract Enhancement**: Added `getUserAuthorizationScopeHashes()` view function to allow external access to user's authorization scope hashes array.
 
 ---
 
@@ -628,7 +630,7 @@ test/
 
 **Total Tests**: 200+
 
-**Completed**: 194
+**Completed**: 217
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -650,23 +652,37 @@ test/
 - Section 6.1 - Valid Disputes (11 tests)
 - Section 7.1 - balanceOf (9 tests)
 - Section 7.2 - unlockedBalanceOf (8 tests)
+- Section 8.1 - Compaction Logic (12 tests)
+- Section 8.2 - Array Manipulation (7 tests)
+- Section 8.3 - State Updates (4 tests)
 - Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
 **Not Started**: 6+
 
 ### Recent Updates
-- ✅ Completed Section 7 - Balance View Functions (17 tests total)
-- ✅ Created [test/ZeroLC/ZeroLC.balances.test.ts](test/ZeroLC/ZeroLC.balances.test.ts)
-- ✅ Implemented comprehensive tests for `balanceOf` function (9 tests)
-- ✅ Verified balanceOf includes all remainingAmounts regardless of expiration
-- ✅ Tested balanceOf after deposits, settlements, and disputes
-- ✅ Implemented comprehensive tests for `unlockedBalanceOf` function (8 tests)
-- ✅ Verified unlockedBalanceOf only includes expired scope amounts
-- ✅ Tested mixed active/expired scopes and exact boundary conditions
-- ✅ Confirmed that at exact boundary (notAfter == block.timestamp), scope IS considered expired
-- ✅ Used helper functions (depositForUser, registerScope, createChargeBatch) for cleaner test code
-- ✅ All balance tests use BigInt consistently for proper type handling
+- ✅ Completed Section 8 - Compact User Authorization States (23 tests total)
+- ✅ Created [test/ZeroLC/ZeroLC.compact.test.ts](test/ZeroLC/ZeroLC.compact.test.ts)
+- ✅ Implemented comprehensive tests for compaction logic (12 tests)
+  - Verified return of remainingAmount to balance
+  - Verified numCharges recording from nonce
+  - Verified isNumChargesRecorded flag prevents duplicate counting
+  - Tested multiple expired scopes compaction
+  - Tested compaction doesn't affect active scopes
+  - Tested exact boundary conditions
+- ✅ Implemented array manipulation tests (7 tests)
+  - Verified swap-and-pop array removal logic
+  - Tested single, first, middle, and last element removal
+  - Tested complete array emptying
+- ✅ Implemented state update tests (4 tests)
+  - Verified balance and numCharges storage updates
+  - Verified remainingAmount clearing
+  - Verified preservation of other scope state fields
+- ✅ **Fixed critical underflow bug** in [contracts/ZeroLC.sol:156-178](contracts/ZeroLC.sol#L156-L178)
+  - Removed automatic `i++` and `i--` that caused underflow at index 0
+  - Loop now manually controls index: increment when skipping, stay when removing
+- ✅ **Added contract enhancement**: `getUserAuthorizationScopeHashes()` view function
+- ✅ All 23 compaction tests passing
 
 ---
 

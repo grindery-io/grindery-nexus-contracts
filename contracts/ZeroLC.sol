@@ -153,16 +153,13 @@ contract ZeroLC is
         bytes32[] storage scopeHashes = userState.authorizationScopeHashes;
         uint256 balance = userState.balance;
         uint256 numCharges = userState.numCharges;
-        for (
-            uint256 i = 0;
-            i < userState.authorizationScopeHashes.length;
-            i++
-        ) {
+        for (uint256 i = 0; i < userState.authorizationScopeHashes.length; ) {
             bytes32 scopeHash = userState.authorizationScopeHashes[i];
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
             if (uint48(block.timestamp) < state.notAfter || state.nonce == 0) {
+                i++;
                 continue;
             }
             if (state.remainingAmount > 0) {
@@ -174,10 +171,10 @@ contract ZeroLC is
                 state.isNumChargesRecorded = 1;
             }
             authorizationScopes[scopeHash] = state;
-            // Delete scope hash
+            // Delete scope hash - swap with last element and pop
+            // Don't increment i, as we need to check the swapped element
             scopeHashes[i] = scopeHashes[scopeHashes.length - 1];
             scopeHashes.pop();
-            i--;
         }
         userState.balance = balance;
         userState.numCharges = numCharges;
@@ -518,5 +515,11 @@ contract ZeroLC is
             balance += state.remainingAmount;
         }
         return balance;
+    }
+
+    function getUserAuthorizationScopeHashes(
+        address user
+    ) public view returns (bytes32[] memory) {
+        return userStates[user].authorizationScopeHashes;
     }
 }
