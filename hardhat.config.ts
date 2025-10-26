@@ -264,11 +264,37 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
-    version: "0.8.25",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 1000000,
+    compilers: [
+      {
+        version: "0.8.25",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1000000,
+          },
+        },
+      },
+    ],
+    overrides: {
+      "contracts/ZeroLC.sol": {
+        version: "0.8.30",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1000000,
+          },
+          viaIR: true,
+        },
+      },
+      "contracts/test/SettlementCaller.sol": {
+        version: "0.8.30",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1000000,
+          },
+          viaIR: true,
+        },
       },
     },
   },
