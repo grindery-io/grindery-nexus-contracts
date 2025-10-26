@@ -393,7 +393,7 @@ describe("ZeroLC - Compact User Authorization States", function () {
       expect(activeState2.notAfter).to.equal(activeState1.notAfter);
     });
 
-    it("should handle compaction at exact expiration boundary (notAfter == block.timestamp, should skip)", async function () {
+    it("should compact scope at exact expiration boundary (notAfter == block.timestamp)", async function () {
       const { zeroLC, user1, agent1, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user1, 1000n);
@@ -404,9 +404,9 @@ describe("ZeroLC - Compact User Authorization States", function () {
       // Move to exact expiration time
       await time.increaseTo(currentTime + 100);
 
-      // At exact boundary, block.timestamp == notAfter
-      // The condition is: uint48(block.timestamp) < state.notAfter
-      // This is FALSE when they're equal, so scope should be compacted
+      // At exact boundary where block.timestamp == notAfter:
+      // The condition uint48(block.timestamp) < state.notAfter evaluates to FALSE
+      // Therefore the scope IS EXPIRED and SHOULD be compacted (notAfter is EXCLUSIVE)
 
       const userState1 = await zeroLC.userStates(user1.address);
       expect(userState1.balance).to.equal(700n);

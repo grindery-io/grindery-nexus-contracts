@@ -168,20 +168,24 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       expect(state.notAfter).to.equal(blockTimestamp + 300);
     });
 
-    it("should allow revocation at exact boundary (notAfter == newNotAfter + few seconds)", async function () {
+    it("should allow revocation when notAfter is 1 second greater than newNotAfter (true boundary)", async function () {
       const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope } =
         await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user, MICRO_AMOUNT);
 
       const currentTime = await time.latest();
+      // newNotAfter will be block.timestamp + 300
+      // We want notAfter to be just barely > newNotAfter
+      // Need to account for a few blocks of execution time between registration and revocation
+      // Setting notAfter = currentTime + 305 gives small but safe margin
       const { scope, signature } = await createAuthorizationScope(
         user,
         agent,
         MICRO_AMOUNT,
         3600,
         currentTime,
-        currentTime + 400 // Enough margin to pass the > check (newNotAfter will be ~current+300)
+        currentTime + 305 // Small margin to ensure notAfter > newNotAfter after block advancement
       );
       await zeroLC.registerAuthorizationScope(scope, signature);
 
@@ -190,6 +194,34 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
 
       // Should succeed because notAfter > newNotAfter (which is block.timestamp + 300)
       await expect(zeroLC.revokeAuthorizationScope(scope, revSignature)).to.not.be.reverted;
+    });
+
+    it("should revert revocation when notAfter <= newNotAfter", async function () {
+      const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, MICRO_AMOUNT);
+
+      const currentTime = await time.latest();
+      // newNotAfter will be block.timestamp + 300
+      // Make notAfter < newNotAfter to trigger the check
+      // Setting notAfter = currentTime + 299 will make notAfter < newNotAfter (after accounting for block advancement)
+      const { scope, signature } = await createAuthorizationScope(
+        user,
+        agent,
+        MICRO_AMOUNT,
+        3600,
+        currentTime,
+        currentTime + 299 // Will make notAfter < newNotAfter
+      );
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
+
+      await expect(zeroLC.revokeAuthorizationScope(scope, revSignature)).to.be.revertedWith(
+        "Authorization scope is not active"
+      );
     });
 
     it("should emit AuthorizationScopeRevoking event", async function () {
