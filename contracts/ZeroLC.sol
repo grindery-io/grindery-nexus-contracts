@@ -408,6 +408,7 @@ contract ZeroLC is
                 isNumChargesRecorded: state.isNumChargesRecorded
             });
         }
+        // TODO: Due to EIP-7702, this check is no longer reliable, we need to change it to check whether sender is EOA
         if (tx.origin == msg.sender) {
             // Calldata can be easily retrieved
             emit ChargesSettled();
