@@ -8,6 +8,7 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 **Migration Status**:
 - ✅ **Section 3 - Authorization Tests** - UPDATED (49/49 tests passing)
+- ✅ **Section 7 - Balance View Functions** - UPDATED (23/23 tests passing, +6 new granularity tests)
 - ⚠️ **Section 5 - Settlement Tests** - NEEDS UPDATE (ChargeEntry field rename, scaling)
 - ⚠️ **Section 6 - Dispute Tests** - NEEDS UPDATE (cascading deduction logic)
 - ⚠️ **Section 8 - Compaction Tests** - NEEDS UPDATE (state field changes)
@@ -353,9 +354,9 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 ---
 
-## 7. Balance View Functions
+## 7. Balance View Functions ✅ COMPLETED (23 tests)
 
-### 7.1 balanceOf
+### 7.1 balanceOf (12 tests)
 
 - [x] balanceOf returns correct total (balance + all remainingAmounts)
 - [x] balanceOf with no scopes (returns only balance)
@@ -364,10 +365,13 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - [x] balanceOf after partial settlements
 - [x] balanceOf after deposits
 - [x] balanceOf after disputes
+- [x] balanceOf returns correct unscaled balance with granularity 3 (NEW)
+- [x] balanceOf returns correct unscaled balance with granularity 6 (NEW)
+- [x] balanceOf after settlements with granularity (NEW)
 - [x] balanceOf for zero address
 - [x] balanceOf for address with no state
 
-### 7.2 unlockedBalanceOf
+### 7.2 unlockedBalanceOf (11 tests)
 
 - [x] unlockedBalanceOf returns balance + expired scope amounts only
 - [x] unlockedBalanceOf with no scopes
@@ -375,9 +379,22 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - [x] unlockedBalanceOf with all expired scopes
 - [x] unlockedBalanceOf with mixed active/expired scopes
 - [x] unlockedBalanceOf at exact expiration boundary (notAfter == block.timestamp)
-- [ ] unlockedBalanceOf after compaction
+- [x] unlockedBalanceOf returns correct unscaled balance with granularity 3 (NEW)
+- [x] unlockedBalanceOf returns correct unscaled balance with granularity 6 (NEW)
+- [x] unlockedBalanceOf with mixed granularities (NEW)
 - [x] unlockedBalanceOf for zero address
 - [x] unlockedBalanceOf for address with no state
+
+**Updates Applied (2025-01-08)**:
+- ✅ Updated `registerScope` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
+- ✅ Updated `createChargeBatch` helper: renamed `amount` → `scaledAmount`, changed encoding types
+- ✅ Added `calculateScaledAmount` helper function
+- ✅ Added `getAuthorizationScopeData` helper function
+- ✅ Updated settlement test to use scaled amounts
+- ✅ Updated dispute test to use scaled amounts and uint32 type
+- ✅ Added 6 new tests for granularity support (3 in 7.1, 3 in 7.2)
+- ✅ Verified balance functions return unscaled amounts regardless of granularity
+- ✅ All 23 tests passing
 
 ---
 
@@ -849,7 +866,7 @@ test/
 
 **Total Tests**: 300+
 
-**Completed**: 284 tests
+**Completed**: 307 tests
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -870,8 +887,8 @@ test/
 - Section 5.8 - Empty Batch Validation (3 tests)
 - Section 5.9 - Event Emissions (5 tests)
 - Section 6.1 - Valid Disputes (11 tests)
-- Section 7.1 - balanceOf (9 tests)
-- Section 7.2 - unlockedBalanceOf (8 tests)
+- **Section 7.1 - balanceOf (12 tests - +3 NEW granularity tests)** ✅ UPDATED
+- **Section 7.2 - unlockedBalanceOf (11 tests - +3 NEW granularity tests)** ✅ UPDATED
 - Section 8.1 - Compaction Logic (12 tests)
 - Section 8.2 - Array Manipulation (7 tests)
 - Section 8.3 - State Updates (4 tests)
@@ -886,6 +903,21 @@ test/
 **Not Started**: Sections 20.7-20.10 (edge cases, integration, security for withdrawals), plus Sections 1, 9-19, 21
 
 ### Recent Updates
+
+**2025-01-08**: ✅ **Updated Section 7 - Balance View Functions** (23 tests total, +6 new)
+- **File**: [test/ZeroLC/ZeroLC.balances.test.ts](test/ZeroLC/ZeroLC.balances.test.ts)
+- **Test Results**: All 23 tests passing
+- **Key Changes**:
+  - ✅ Updated `registerScope` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
+  - ✅ Updated `createChargeBatch` helper: renamed `amount` → `scaledAmount`, changed encoding from uint48 → uint32
+  - ✅ Added `calculateScaledAmount` helper function for scaling calculations
+  - ✅ Added `getAuthorizationScopeData` helper function to query scope metadata
+  - ✅ Updated settlement test to use scaled amounts with proper timestamps
+  - ✅ Updated dispute test to use scaled amounts and uint32 type for `amountToClawback`
+  - ✅ Section 7.1: Added 3 new granularity tests (granularity 3, 6, and settlements with granularity)
+  - ✅ Section 7.2: Added 3 new granularity tests (granularity 3, 6, and mixed granularities)
+  - ✅ Verified `balanceOf()` and `unlockedBalanceOf()` always return unscaled amounts
+- **Coverage**: Complete coverage of balance view functions with granularity support
 
 **2025-01-08**: ✅ **Updated Section 3 - Authorization Tests for Three-State Withdrawal System** (49 tests total, +8 new)
 - **File**: [test/ZeroLC/ZeroLC.authorization.test.ts](test/ZeroLC/ZeroLC.authorization.test.ts)
