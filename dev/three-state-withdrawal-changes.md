@@ -716,11 +716,68 @@ Based on glob search, these test files likely need updates:
 
 ---
 
-## Test Helper Functions
+## Test Helper Functions - Migration Guide
 
-The authorization test suite ([test/ZeroLC/ZeroLC.authorization.test.ts](test/ZeroLC/ZeroLC.authorization.test.ts:1)) includes helper functions to work with the new three-state system:
+The ZeroLC test suite has common helper functions duplicated across multiple test files. This section documents how each helper function needs to be updated for the three-state withdrawal system. **Apply these changes to ALL test files that contain these helpers.**
 
-### createAuthorizationScope
+### Common Helper Functions Found In Test Files
+
+These functions appear in most/all test files inside `deployZeroLCFixture()`:
+- `createAuthorizationScope` - **CRITICAL, appears in all test files**
+- `depositForUser` - No changes needed
+- `registerScope` - Needs parameter update (calls createAuthorizationScope)
+- `createChargeEntry` - **CRITICAL, field rename** (settlement, withdrawal, dispute tests)
+
+---
+
+### 1. createAuthorizationScope (CRITICAL - ALL FILES)
+
+**Files:** `authorization.test.ts` ✅, `settlement.test.ts`, `withdrawal.test.ts`, `revocation.test.ts`, `dispute.test.ts`, `compact.test.ts`
+
+**BEFORE (old implementation):**
+```typescript
+async function createAuthorizationScope(
+  user: SignerWithAddress,
+  agent: SignerWithAddress,
+  totalAmount: bigint,
+  disputeWindow: number = 3600,
+  notBefore?: number,
+  notAfter?: number
+) {
+  const currentTime = await time.latest();
+  const scope = {
+    user: user.address,
+    totalAmount: totalAmount,          // ❌ OLD position (2nd field)
+    disputeWindow: disputeWindow,
+    agent: agent.address,
+    notBefore: notBefore ?? currentTime,
+    notAfter: notAfter ?? currentTime + 86400,
+  };
+
+  const domain = {
+    name: "ZeroLC",
+    version: "1",
+    chainId: (await ethers.provider.getNetwork()).chainId,
+    verifyingContract: await zeroLC.getAddress(),
+  };
+
+  const types = {
+    AuthorizationScope: [
+      { name: "user", type: "address" },
+      { name: "totalAmount", type: "uint48" },    // ❌ OLD type
+      { name: "disputeWindow", type: "uint48" },  // ❌ OLD type
+      { name: "agent", type: "address" },
+      { name: "notBefore", type: "uint48" },      // ❌ OLD type
+      { name: "notAfter", type: "uint48" },       // ❌ OLD type
+    ],
+  };
+
+  const signature = await user.signTypedData(domain, types, scope);
+  return { scope, signature };
+}
+```
+
+**AFTER (new implementation):**
 ```typescript
 async function createAuthorizationScope(
   user: SignerWithAddress,
@@ -729,33 +786,292 @@ async function createAuthorizationScope(
   disputeWindow: number = 3600,
   notBefore?: number,
   notAfter?: number,
-  amountGranularity: number = 0  // NEW parameter
-)
-```
-**Changes:**
-- Added `amountGranularity` parameter (default: 0 for no scaling)
-- Updates struct field order to match new contract
-- Updates EIP-712 types to match new field types
+  amountGranularity: number = 0  // ✅ NEW parameter
+) {
+  const currentTime = await time.latest();
+  const scope = {
+    user: user.address,
+    disputeWindow: disputeWindow,      // ✅ MOVED to 2nd position
+    agent: agent.address,
+    notBefore: notBefore ?? currentTime,
+    notAfter: notAfter ?? currentTime + 86400,
+    totalAmount: totalAmount,          // ✅ MOVED to 6th position
+    amountGranularity: amountGranularity, // ✅ NEW field (7th position)
+  };
 
-### getAuthorizationScopeData
+  const domain = {
+    name: "ZeroLC",
+    version: "1",
+    chainId: (await ethers.provider.getNetwork()).chainId,
+    verifyingContract: await zeroLC.getAddress(),
+  };
+
+  const types = {
+    AuthorizationScope: [
+      { name: "user", type: "address" },
+      { name: "disputeWindow", type: "uint40" },  // ✅ CHANGED from uint48
+      { name: "agent", type: "address" },
+      { name: "notBefore", type: "uint40" },      // ✅ CHANGED from uint48
+      { name: "notAfter", type: "uint40" },       // ✅ CHANGED from uint48
+      { name: "totalAmount", type: "uint128" },   // ✅ CHANGED from uint48
+      { name: "amountGranularity", type: "uint8" }, // ✅ NEW field
+    ],
+  };
+
+  const signature = await user.signTypedData(domain, types, scope);
+  return { scope, signature };
+}
+```
+
+**Change Checklist:**
+- [x] ✅ Add `amountGranularity: number = 0` parameter
+- [x] ✅ Move `disputeWindow` to 2nd position in scope object
+- [x] ✅ Move `totalAmount` to 6th position in scope object
+- [x] ✅ Add `amountGranularity` field to scope object (7th position)
+- [x] ✅ Reorder EIP-712 types array to match new field order
+- [x] ✅ Change `disputeWindow` type from `uint48` → `uint40`
+- [x] ✅ Change `notBefore` type from `uint48` → `uint40`
+- [x] ✅ Change `notAfter` type from `uint48` → `uint40`
+- [x] ✅ Change `totalAmount` type from `uint48` → `uint128`
+- [x] ✅ Add `amountGranularity` type `uint8` to types array
+
+---
+
+### 2. depositForUser (NO CHANGES NEEDED)
+
+**Files:** ALL test files
+
+This helper function **does not need any changes**. It remains the same:
+
 ```typescript
-async function getAuthorizationScopeData(scopeHash: string)
+async function depositForUser(user: SignerWithAddress, amount: bigint) {
+  await gasToken.connect(user).approve(await zeroLC.getAddress(), amount);
+  await zeroLC.connect(user)["deposit(uint256)"](amount);
+}
 ```
-Helper to fetch data from the `authorizationScopeData` mapping which stores:
-- `totalAmount` (unscaled)
-- `disputeWindow`
-- `amountGranularity`
 
-### calculateScaledAmount
+✅ No action required for this function.
+
+---
+
+### 3. NEW Helper: getAuthorizationScopeData
+
+**Files to ADD:** `authorization.test.ts` ✅, `settlement.test.ts`, `withdrawal.test.ts`, `dispute.test.ts`
+
+**Purpose:** Fetch data from the new `authorizationScopeData` mapping.
+
+**Implementation:**
+```typescript
+async function getAuthorizationScopeData(scopeHash: string) {
+  return await zeroLC.authorizationScopeData(scopeHash);
+}
+```
+
+**Add to fixture return:**
+```typescript
+return {
+  // ... existing returns
+  getAuthorizationScopeData,  // ✅ ADD THIS
+};
+```
+
+**Usage:**
+```typescript
+const scopeHash = await zeroLC.getScopeHash(scope);
+const scopeData = await getAuthorizationScopeData(scopeHash);
+
+expect(scopeData.totalAmount).to.equal(totalAmount);  // Unscaled original amount
+expect(scopeData.disputeWindow).to.equal(3600);
+expect(scopeData.amountGranularity).to.equal(3);
+```
+
+---
+
+### 4. NEW Helper: calculateScaledAmount
+
+**Files to ADD:** ALL test files
+
+**Purpose:** Calculate what amount will be after scaling (for assertions).
+
+**Implementation:**
 ```typescript
 function calculateScaledAmount(amount: bigint, granularity: number): bigint {
   return amount / (10n ** BigInt(granularity));
 }
 ```
-Calculates what the scaled amount will be when stored in contract state. Useful for assertions.
 
-### State Assertions
-When asserting on `authorizationScopes` state:
+**Add to fixture return:**
+```typescript
+return {
+  // ... existing returns
+  calculateScaledAmount,  // ✅ ADD THIS
+};
+```
+
+**Usage:**
+```typescript
+const totalAmount = 1000000n;
+const granularity = 3;
+const expectedScaledAmount = calculateScaledAmount(totalAmount, granularity); // 1000n
+
+const scopeState = await zeroLC.authorizationScopes(scopeHash);
+expect(scopeState.remainingAmount).to.equal(expectedScaledAmount);
+```
+
+---
+
+### 5. createChargeBatch (CRITICAL - settlement/withdrawal/dispute tests)
+
+**Files:** `settlement.test.ts`, `withdrawal.test.ts`, `dispute.test.ts`
+
+**BEFORE (old implementation):**
+```typescript
+async function createChargeBatch(
+  scope: any,
+  agent: SignerWithAddress,
+  entries: { amount: bigint; nonce: number; notAfter: number }[],  // ❌ OLD field name
+  timestamp?: number
+) {
+  // ... existing code ...
+
+  const chargeEntries = entries.map((e) => ({
+    amount: e.amount,      // ❌ OLD field name
+    nonce: e.nonce,
+    notAfter: e.notAfter,
+  }));
+
+  // ... encoding logic ...
+  const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["bytes32", "tuple(uint48,uint24,uint48)", "bytes32"],  // ❌ OLD types
+    [batchPartHash, [lastEntry.amount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
+  );
+
+  // ... rest of function
+}
+```
+
+**AFTER (new implementation):**
+```typescript
+async function createChargeBatch(
+  scope: any,
+  agent: SignerWithAddress,
+  entries: { scaledAmount: bigint; nonce: number; notAfter: number }[],  // ✅ RENAMED
+  timestamp?: number
+) {
+  // ... existing code ...
+
+  const chargeEntries = entries.map((e) => ({
+    scaledAmount: e.scaledAmount,  // ✅ RENAMED from 'amount'
+    nonce: e.nonce,
+    notAfter: e.notAfter,
+  }));
+
+  // ... encoding logic ...
+  const verifierEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["bytes32", "tuple(uint32,uint24,uint48)", "bytes32"],  // ✅ CHANGED uint48→uint32
+    [batchPartHash, [lastEntry.scaledAmount, lastEntry.nonce, lastEntry.notAfter], scopeHash]
+  );
+
+  // ... rest of function
+}
+```
+
+**Change Checklist:**
+- [ ] Rename `entries` parameter field: `amount` → `scaledAmount`
+- [ ] Update `chargeEntries.map()`: rename `amount` → `scaledAmount`
+- [ ] Update encoding type: `tuple(uint48,uint24,uint48)` → `tuple(uint32,uint24,uint48)`
+- [ ] Update all call sites to pass `scaledAmount` instead of `amount`
+
+**⚠️ IMPORTANT - Calling Code Must Change:**
+```typescript
+// OLD - passing unscaled amounts
+const chargeBatch = await createChargeBatch(scope, agent1, [
+  { amount: 50000n, nonce: 1, notAfter: scope.notAfter },  // ❌
+  { amount: 30000n, nonce: 2, notAfter: scope.notAfter },  // ❌
+]);
+
+// NEW - MUST scale amounts before calling
+const granularity = 3;
+const chargeBatch = await createChargeBatch(scope, agent1, [
+  {
+    scaledAmount: calculateScaledAmount(50000n, granularity),  // ✅
+    nonce: 1,
+    notAfter: scope.notAfter
+  },
+  {
+    scaledAmount: calculateScaledAmount(30000n, granularity),  // ✅
+    nonce: 2,
+    notAfter: scope.notAfter
+  },
+]);
+```
+
+---
+
+### 6. registerScope (parameter update needed)
+
+**Files:** `settlement.test.ts`, `withdrawal.test.ts`, `dispute.test.ts`
+
+This helper wraps `createAuthorizationScope` and `registerAuthorizationScope`.
+
+**BEFORE:**
+```typescript
+async function registerScope(
+  user: SignerWithAddress,
+  agent: SignerWithAddress,
+  totalAmount: bigint,
+  disputeWindow: number = 3600,
+  notBefore?: number,
+  notAfter?: number
+) {
+  const { scope, signature } = await createAuthorizationScope(
+    user, agent, totalAmount, disputeWindow, notBefore, notAfter
+  );
+  await zeroLC.registerAuthorizationScope(scope, signature);
+  return scope;
+}
+```
+
+**AFTER:**
+```typescript
+async function registerScope(
+  user: SignerWithAddress,
+  agent: SignerWithAddress,
+  totalAmount: bigint,
+  disputeWindow: number = 3600,
+  notBefore?: number,
+  notAfter?: number,
+  amountGranularity: number = 0  // ✅ ADD THIS
+) {
+  const { scope, signature } = await createAuthorizationScope(
+    user, agent, totalAmount, disputeWindow, notBefore, notAfter, amountGranularity  // ✅ PASS IT
+  );
+  await zeroLC.registerAuthorizationScope(scope, signature);
+  return scope;
+}
+```
+
+**Change Checklist:**
+- [ ] Add `amountGranularity: number = 0` parameter
+- [ ] Pass `amountGranularity` to `createAuthorizationScope` call
+
+---
+
+### 7. State Assertions - BREAKING CHANGES
+
+**OLD Assertions (will cause errors):**
+```typescript
+const scopeState = await zeroLC.authorizationScopes(scopeHash);
+
+// ❌ These fields NO LONGER EXIST - tests will fail
+expect(scopeState.agentPendingAmount).to.equal(0);
+expect(scopeState.nonce).to.equal(1);
+expect(scopeState.withdrawalNonce).to.equal(0);
+expect(scopeState.lastChargeTimestamp).to.equal(0);
+expect(scopeState.isNumChargesRecorded).to.equal(0);
+```
+
+**NEW Assertions:**
 ```typescript
 const scopeState = await zeroLC.authorizationScopes(scopeHash);
 
@@ -766,12 +1082,57 @@ expect(scopeState.chargedAmountFinalizing).to.equal(0);
 expect(scopeState.chargedAmountPending).to.equal(0);
 expect(scopeState.notAfter).to.equal(scope.notAfter);
 
-// ❌ Removed fields - DO NOT USE
-// scopeState.agentPendingAmount  // Use getAgentPendingAmount() instead
-// scopeState.nonce               // Embedded in nonceAndFlags
-// scopeState.withdrawalNonce     // Removed entirely
-// scopeState.isNumChargesRecorded // Now a flag in nonceAndFlags
+// ✅ For agentPendingAmount, use contract function
+const agentPending = await zeroLC.getAgentPendingAmount(scopeHash);
+expect(agentPending).to.equal(expectedAmount);
+
+// ⚠️ Cannot directly access: nonce, withdrawalNonce, isNumChargesRecorded
+// These are embedded in nonceAndFlags (packed storage)
 ```
+
+---
+
+### Quick Reference - Fixture Return Updates
+
+Update all `deployZeroLCFixture()` return statements to include new helpers:
+
+```typescript
+return {
+  zeroLC,
+  gasToken,
+  universalSigValidator,
+  owner,
+  user1,
+  user2,
+  agent1,
+  agent2,
+  createAuthorizationScope,   // ✅ Updated implementation
+  depositForUser,             // ✅ No changes needed
+  registerScope,              // ✅ Updated implementation (if exists)
+  createChargeBatch,          // ✅ Updated implementation (if exists)
+  getAuthorizationScopeData,  // ✅ NEW - add this
+  calculateScaledAmount,      // ✅ NEW - add this
+};
+```
+
+---
+
+### Summary - Helper Function Migration by File
+
+| Test File | createAuthorizationScope | depositForUser | getAuthorizationScopeData | calculateScaledAmount | createChargeBatch | registerScope |
+|-----------|--------------------------|----------------|---------------------------|----------------------|-------------------|---------------|
+| `authorization.test.ts` | ✅ DONE | ✅ No change | ✅ DONE | ✅ DONE | N/A | N/A |
+| `settlement.test.ts` | ⬜ TODO | ✅ No change | ⬜ ADD | ⬜ ADD | ⬜ TODO | ⬜ TODO |
+| `withdrawal.test.ts` | ⬜ TODO | ✅ No change | ⬜ ADD | ⬜ ADD | ⬜ TODO | ⬜ TODO |
+| `dispute.test.ts` | ⬜ TODO | ✅ No change | ⬜ ADD | ⬜ ADD | ⬜ TODO | ⬜ TODO |
+| `compact.test.ts` | ⬜ TODO | ✅ No change | ⬜ ADD | ⬜ ADD | N/A | N/A |
+| `revocation.test.ts` | ⬜ TODO | ✅ No change | N/A | ⬜ ADD | N/A | N/A |
+| `balances.test.ts` | N/A | ✅ No change | N/A | N/A | N/A | N/A |
+
+**Legend:**
+- ✅ = Completed
+- ⬜ = Needs update
+- N/A = Function doesn't exist in this file
 
 ---
 

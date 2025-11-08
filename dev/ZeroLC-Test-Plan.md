@@ -2,6 +2,26 @@
 
 This document outlines all tests needed to comprehensively cover the ZeroLC contract, including edge cases and security scenarios.
 
+## ⚠️ THREE-STATE WITHDRAWAL SYSTEM UPDATE (2025-01-08)
+
+The contract has been upgraded to use a three-state withdrawal pipeline system. **Many test files require updates.**
+
+**Migration Status**:
+- ✅ **Section 3 - Authorization Tests** - UPDATED (49/49 tests passing)
+- ⚠️ **Section 5 - Settlement Tests** - NEEDS UPDATE (ChargeEntry field rename, scaling)
+- ⚠️ **Section 6 - Dispute Tests** - NEEDS UPDATE (cascading deduction logic)
+- ⚠️ **Section 8 - Compaction Tests** - NEEDS UPDATE (state field changes)
+- ⚠️ **Section 20 - Withdrawal Tests** - NEEDS COMPLETE REWRITE (obsolete methods)
+
+**Key Changes**:
+- `AuthorizationScope` struct: added `amountGranularity`, reordered fields, changed types
+- `AuthorizationScopeState` struct: three-state amounts (`pending`/`finalizing`/`withdrawable`)
+- `ChargeEntry` struct: `amount` → `scaledAmount` (uint48 → uint32)
+- Removed: `recentCharges` parameter, `withdrawalNonce`, view functions
+- See [dev/three-state-withdrawal-changes.md](dev/three-state-withdrawal-changes.md) for complete migration guide
+
+---
+
 ## Test Coverage Goals
 - **200+ test cases** covering all functions and edge cases
 - Boundary conditions on all numeric and time-based checks
@@ -81,7 +101,7 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ## 3. Authorization Scope Registration Tests
 
-### 3.1 Valid Registration
+### 3.1 Valid Registration ✅ COMPLETED (13 tests)
 
 - [x] Register scope with valid signature and sufficient balance
 - [x] Register scope with EOA signature
@@ -91,13 +111,13 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 - [x] Register scope emits AuthorizationScopeRegistered event
 - [x] Register scope updates user state correctly
 - [x] Register scope updates agent state correctly
-- [x] Register scope updates authorizationScopes mapping correctly
+- [x] Register scope updates authorizationScopes mapping correctly (with three-state amounts)
 - [x] Register multiple scopes for same user
 - [x] Register multiple scopes for same agent
 - [x] Register scope updates user balance correctly (subtracts totalAmount)
-- [x] Register same scope twice (should revert with "Authorization scope already registered")
+- [x] Register same scope twice (should revert with "ScopeAlreadyRegistered")
 
-### 3.2 Edge Cases & Failures
+### 3.2 Edge Cases & Failures ✅ COMPLETED (16 tests)
 
 - [x] Register scope with insufficient balance and no allowance (should revert)
 - [x] Register scope with invalid signature (should revert)
@@ -113,10 +133,13 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 - [x] Register scope with totalAmount == balance (exact match)
 - [x] Register scope with totalAmount > balance by 1 wei (should revert without allowance)
 - [x] Reentrancy attack during registration (should be blocked)
+- [x] Register with totalAmount that doesn't divide evenly by amountGranularity (InvalidAmountGranularity)
+- [x] Register with scaled amount exceeding uint32 max (InvalidAmountGranularity)
+- [x] Register with timestamp range exceeding uint32 max (InvalidTimestampRange)
 
-### 3.3 EIP712 Signature Verification
+### 3.3 EIP712 Signature Verification ✅ COMPLETED (7 tests)
 
-- [x] Signature includes all fields: user, totalAmount, disputeWindow, agent, notBefore, notAfter
+- [x] Signature includes all fields: user, disputeWindow, agent, notBefore, notAfter, totalAmount, amountGranularity
 - [x] Signature verification with tampered user address fails
 - [x] Signature verification with tampered totalAmount fails
 - [x] Signature verification with tampered disputeWindow fails
@@ -124,19 +147,28 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 - [x] Signature verification with tampered notBefore fails
 - [x] Signature verification with tampered notAfter fails
 
-### 3.4 Auto-Deposit Logic
+### 3.4 Auto-Deposit Logic ✅ COMPLETED (4 tests)
 
 - [x] Auto-deposit when balance < totalAmount and allowance sufficient
 - [x] No auto-deposit when balance < totalAmount but allowance insufficient
 - [x] No auto-deposit when balance < totalAmount but token balance insufficient
 - [x] Auto-deposit deposits exact amount needed (totalAmount - balance)
 
-### 3.5 Scope Hash Calculation
+### 3.5 Scope Hash Calculation ✅ COMPLETED (4 tests)
 
 - [x] getScopeHash returns consistent hash for same scope
 - [x] getScopeHash returns different hash for different scopes
-- [x] Scope hash includes domain separator
+- [x] Scope hash includes domain separator (with new struct format)
 - [x] Scope hash uniquely identifies scope
+
+### 3.6 Amount Granularity ✅ COMPLETED (5 tests)
+
+- [x] Register scope with granularity 3 (1000x scaling) and verify scaled storage
+- [x] Register scope with granularity 6 (USDC-like, 1,000,000x scaling)
+- [x] Register scope with granularity 12 (high precision, 10^12 scaling)
+- [x] Auto-deposit with granularity 3 (verify scaling works with auto-deposit)
+- [x] Emit AuthorizationScopeRegistered event with correct scopeHash for non-zero granularity
+- [x] Verify authorizationScopeData mapping stores unscaled totalAmount, disputeWindow, amountGranularity
 
 ---
 
@@ -584,9 +616,32 @@ This document outlines all tests needed to comprehensively cover the ZeroLC cont
 
 ---
 
-## 20. Agent Withdrawal Tests ✅ COMPLETED (81 tests total)
+## 20. Agent Withdrawal Tests ⚠️ NEEDS UPDATE FOR THREE-STATE SYSTEM (81 tests total)
 
-**Status**: All core withdrawal functionality fully tested including edge cases, integration scenarios, and security attack vectors.
+**Status**: Tests implemented for OLD two-state withdrawal system. **REQUIRES UPDATE** for new three-state pipeline.
+
+**Breaking Changes in Three-State System**:
+- ❌ **`recentCharges` parameter REMOVED** from `withdrawFromAuthorizationScope()`
+- ❌ **`withdrawalNonce` field REMOVED** from `AuthorizationScopeState`
+- ❌ **`getAgentWithdrawalNonce()` function REMOVED**
+- ❌ **`getWithdrawableAmountSimple()` function REMOVED**
+- ❌ **`getWithdrawableAmountDetailed()` function REMOVED**
+- ✅ **NEW**: Amounts automatically progress: `pending` → `finalizing` → `withdrawable`
+- ✅ **NEW**: Time-based withdrawal (no charge batch submission needed)
+
+**Tests to Update/Rewrite**:
+- Section 20.1: Simple withdrawal still valid but verify new time-based progression
+- Section 20.2: Detailed withdrawal with recentCharges - **OBSOLETE, remove entirely**
+- Section 20.3: Signature-based withdrawal - update for new signature format
+- Section 20.6: View functions - **OBSOLETE**, replace with new three-state queries
+- All sections: Update state assertions (no more `withdrawalNonce`, use three-state amounts)
+
+**New Tests Needed**:
+- Three-state pipeline progression (pending → finalizing → withdrawable)
+- Finalization timestamp updates
+- Cascading dispute deduction from three buckets
+- Multiple withdrawals as amounts progress through states
+- Time-based withdrawal without providing charge data
 
 ### 20.1 Simple Withdrawal Method (Empty recentCharges) ✅ COMPLETED (11 tests)
 
@@ -794,15 +849,16 @@ test/
 
 **Total Tests**: 300+
 
-**Completed**: 271 tests
+**Completed**: 284 tests
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
 - Section 3.1 - Valid Registration (13 tests including ERC-6492)
-- Section 3.2 - Edge Cases & Failures (13 tests)
+- Section 3.2 - Edge Cases & Failures (16 tests - **+3 NEW: granularity & timestamp range validation**)
 - Section 3.3 - EIP712 Signature Verification (7 tests)
 - Section 3.4 - Auto-Deposit Logic (4 tests)
 - Section 3.5 - Scope Hash Calculation (4 tests)
+- Section 3.6 - Amount Granularity (5 tests - **NEW SECTION**)
 - Section 4 - Authorization Scope Revocation (18 tests)
 - Section 5.1 - Valid Settlement (10 tests)
 - Section 5.2 - Signature Verification (9 tests)
@@ -830,6 +886,32 @@ test/
 **Not Started**: Sections 20.7-20.10 (edge cases, integration, security for withdrawals), plus Sections 1, 9-19, 21
 
 ### Recent Updates
+
+**2025-01-08**: ✅ **Updated Section 3 - Authorization Tests for Three-State Withdrawal System** (49 tests total, +8 new)
+- **File**: [test/ZeroLC/ZeroLC.authorization.test.ts](test/ZeroLC/ZeroLC.authorization.test.ts)
+- **Test Results**: All 49 tests passing
+- **Key Changes**:
+  - ✅ Updated `AuthorizationScope` struct: added `amountGranularity`, reordered fields, changed types
+    - Field order: `user, disputeWindow, agent, notBefore, notAfter, totalAmount, amountGranularity`
+    - Type changes: `totalAmount` uint48→uint128, `disputeWindow/notBefore/notAfter` uint48→uint40
+  - ✅ Updated `AuthorizationScopeState` struct: removed old fields, added three-state amounts
+    - Removed: `agentPendingAmount`, `nonce`, `withdrawalNonce`, `isNumChargesRecorded`, `lastChargeTimestamp`
+    - Added: `chargedAmountWithdrawable`, `chargedAmountFinalizing`, `chargedAmountPending`, `nonceAndFlags`
+  - ✅ Section 3.2: Added 3 new validation tests
+    - Invalid amount granularity (doesn't divide evenly)
+    - Scaled amount exceeds uint32 max
+    - Timestamp range exceeds uint32 max
+  - ✅ Section 3.6: New Amount Granularity section (5 tests)
+    - Tests for granularity 3, 6, and 12
+    - Auto-deposit with granularity
+    - authorizationScopeData mapping verification
+  - ✅ Updated all EIP-712 type definitions (~18 locations) to match new struct
+  - ✅ Updated all state assertions to use new three-state amount fields
+  - ✅ Added helper functions: `getAuthorizationScopeData()`, `calculateScaledAmount()`
+- **Documentation**: Updated [dev/three-state-withdrawal-changes.md](dev/three-state-withdrawal-changes.md) with comprehensive helper function migration guide
+  - Detailed before/after examples for all common test helpers
+  - Migration table showing status by test file
+  - Complete checklist for updating remaining test files
 
 **2025-10-27**: ✅ **Completed Section 20 - Agent Withdrawal Tests** (54 tests)
 - **File**: [test/ZeroLC/ZeroLC.withdrawal.test.ts](test/ZeroLC/ZeroLC.withdrawal.test.ts)

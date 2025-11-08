@@ -47,16 +47,18 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       totalAmount: bigint,
       disputeWindow: number = 3600,
       notBefore?: number,
-      notAfter?: number
+      notAfter?: number,
+      amountGranularity: number = 0
     ) {
       const currentTime = await time.latest();
       const scope = {
         user: user.address,
-        totalAmount: totalAmount,
         disputeWindow: disputeWindow,
         agent: agent.address,
         notBefore: notBefore ?? currentTime,
         notAfter: notAfter ?? currentTime + 86400, // 1 day from now
+        totalAmount: totalAmount,
+        amountGranularity: amountGranularity,
       };
 
       // Get domain separator
@@ -70,11 +72,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -89,6 +92,16 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       await zeroLC.connect(user)["deposit(uint256)"](amount);
     }
 
+    // Helper function to get authorization scope data from the mapping
+    async function getAuthorizationScopeData(scopeHash: string) {
+      return await zeroLC.authorizationScopeData(scopeHash);
+    }
+
+    // Helper function to calculate scaled amount (what gets stored in state)
+    function calculateScaledAmount(amount: bigint, granularity: number): bigint {
+      return amount / (10n ** BigInt(granularity));
+    }
+
     return {
       zeroLC,
       gasToken,
@@ -100,6 +113,8 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       agent2,
       createAuthorizationScope,
       depositForUser,
+      getAuthorizationScopeData,
+      calculateScaledAmount,
     };
   }
 
@@ -125,8 +140,9 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const scopeState = await zeroLC.authorizationScopes(scopeHash);
 
       expect(scopeState.remainingAmount).to.equal(totalAmount);
-      expect(scopeState.agentPendingAmount).to.equal(0);
-      expect(scopeState.nonce).to.equal(1);
+      expect(scopeState.chargedAmountWithdrawable).to.equal(0);
+      expect(scopeState.chargedAmountFinalizing).to.equal(0);
+      expect(scopeState.chargedAmountPending).to.equal(0);
       expect(scopeState.notAfter).to.equal(scope.notAfter);
     });
 
@@ -172,11 +188,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: await wallet.getAddress(),
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       // Get EIP712 digest and sign with user1 (the owner of the wallet)
@@ -190,11 +207,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -233,11 +251,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: walletAddress,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       // Sign the scope with user1 (the owner of the wallet)
@@ -251,11 +270,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -392,11 +412,10 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       const scopeState = await zeroLC.authorizationScopes(scopeHash);
       expect(scopeState.remainingAmount).to.equal(totalAmount);
-      expect(scopeState.agentPendingAmount).to.equal(0);
-      expect(scopeState.nonce).to.equal(1);
+      expect(scopeState.chargedAmountWithdrawable).to.equal(0);
+      expect(scopeState.chargedAmountFinalizing).to.equal(0);
+      expect(scopeState.chargedAmountPending).to.equal(0);
       expect(scopeState.notAfter).to.equal(scope.notAfter);
-      expect(scopeState.lastChargeTimestamp).to.equal(0);
-      expect(scopeState.isNumChargesRecorded).to.equal(0);
     });
 
     it("should register multiple scopes for same user", async function () {
@@ -534,11 +553,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -559,11 +579,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime - 86400, // Past
         notAfter: currentTime - 1, // Already expired
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const signature = await user1.signTypedData(
@@ -576,11 +597,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -601,11 +623,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime + 3600, // 1 hour in future
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const signature = await user1.signTypedData(
@@ -618,11 +641,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -654,11 +678,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 0, // Invalid: zero
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const signature = await user1.signTypedData(
@@ -671,11 +696,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -696,11 +722,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: ethers.ZeroAddress, // Invalid: zero address
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const signature = await user1.signTypedData(
@@ -713,11 +740,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -738,11 +766,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: user1.address, // Same as user
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const signature = await user1.signTypedData(
@@ -755,11 +784,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -780,11 +810,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime + 1, // Next block
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const signature = await user1.signTypedData(
@@ -797,11 +828,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -823,11 +855,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 2, // Very short validity (2 seconds)
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const signature = await user1.signTypedData(
@@ -840,11 +873,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -908,6 +942,82 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       // that attempts to re-enter during the registration process.
       // For now, we verify the modifier is in place by checking successful execution.
     });
+
+    it("should revert when totalAmount doesn't divide evenly by granularity", async function () {
+      const { zeroLC, user1, agent1, createAuthorizationScope, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Use totalAmount that doesn't divide evenly by 10^3 (granularity 3)
+      const totalAmount = 100001n; // Not divisible by 1000
+      await depositForUser(user1, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(
+        user1,
+        agent1,
+        totalAmount,
+        3600,
+        undefined,
+        undefined,
+        3 // amountGranularity
+      );
+
+      await expect(
+        zeroLC.registerAuthorizationScope(scope, signature)
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidAmountGranularity");
+    });
+
+    it("should revert when scaled amount exceeds uint32 max", async function () {
+      const { zeroLC, user1, agent1, createAuthorizationScope, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Use a large amount that when scaled exceeds uint32.max
+      // uint32.max = 4294967295
+      // With granularity 0, totalAmount > 4294967295 should fail
+      const totalAmount = 4294967296n; // uint32.max + 1
+      await depositForUser(user1, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(
+        user1,
+        agent1,
+        totalAmount,
+        3600,
+        undefined,
+        undefined,
+        0 // amountGranularity
+      );
+
+      await expect(
+        zeroLC.registerAuthorizationScope(scope, signature)
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidAmountGranularity");
+    });
+
+    it("should revert when timestamp range exceeds uint32 max", async function () {
+      const { zeroLC, user1, agent1, depositForUser, createAuthorizationScope } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 100000n;
+      await depositForUser(user1, totalAmount);
+
+      const currentTime = await time.latest();
+      // uint32.max = 4294967295 seconds ~= 136 years
+      // Create a range that exceeds this
+      const notBefore = currentTime;
+      const notAfter = currentTime + 4294967296; // uint32.max + 1 seconds
+
+      const { scope, signature } = await createAuthorizationScope(
+        user1,
+        agent1,
+        totalAmount,
+        3600,
+        notBefore,
+        notAfter,
+        0
+      );
+
+      await expect(
+        zeroLC.registerAuthorizationScope(scope, signature)
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidTimestampRange");
+    });
   });
 
   describe("3.3 EIP712 Signature Verification", function () {
@@ -921,11 +1031,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       // Sign with all fields present
@@ -939,11 +1050,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -966,11 +1078,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const domain = {
@@ -983,11 +1096,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -1013,11 +1127,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const domain = {
@@ -1030,11 +1145,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -1058,11 +1174,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const domain = {
@@ -1075,11 +1192,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -1103,11 +1221,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const domain = {
@@ -1120,11 +1239,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -1148,11 +1268,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const domain = {
@@ -1165,11 +1286,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -1193,11 +1315,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: totalAmount,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: totalAmount,
+        amountGranularity: 0,
       };
 
       const domain = {
@@ -1210,11 +1333,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -1355,11 +1479,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: 100000n,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: 100000n,
+        amountGranularity: 0,
       };
 
       const hash1 = await zeroLC.getScopeHash(scope);
@@ -1375,20 +1500,22 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope1 = {
         user: user1.address,
-        totalAmount: 100000n,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: 100000n,
+        amountGranularity: 0,
       };
 
       const scope2 = {
         user: user1.address,
-        totalAmount: 100000n,
         disputeWindow: 3600,
         agent: agent2.address, // Different agent
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: 100000n,
+        amountGranularity: 0,
       };
 
       const hash1 = await zeroLC.getScopeHash(scope1);
@@ -1404,11 +1531,12 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const currentTime = await time.latest();
       const scope = {
         user: user1.address,
-        totalAmount: 100000n,
         disputeWindow: 3600,
         agent: agent1.address,
         notBefore: currentTime,
         notAfter: currentTime + 86400,
+        totalAmount: 100000n,
+        amountGranularity: 0,
       };
 
       const scopeHash = await zeroLC.getScopeHash(scope);
@@ -1428,8 +1556,8 @@ describe("ZeroLC - Authorization Scope Registration", function () {
 
       const expectedHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
-          ["bytes32", "tuple(address,uint48,uint48,address,uint48,uint48)"],
-          [domainSeparator, [scope.user, scope.totalAmount, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter]]
+          ["bytes32", "tuple(address,uint40,address,uint40,uint40,uint128,uint8)"],
+          [domainSeparator, [scope.user, scope.disputeWindow, scope.agent, scope.notBefore, scope.notAfter, scope.totalAmount, scope.amountGranularity]]
         )
       );
 
@@ -1446,43 +1574,48 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       const scopes = [
         {
           user: user1.address,
-          totalAmount: 100000n,
           disputeWindow: 3600,
           agent: agent1.address,
           notBefore: currentTime,
           notAfter: currentTime + 86400,
+          totalAmount: 100000n,
+          amountGranularity: 0,
         },
         {
           user: user2.address, // Different user
-          totalAmount: 100000n,
           disputeWindow: 3600,
           agent: agent1.address,
           notBefore: currentTime,
           notAfter: currentTime + 86400,
+          totalAmount: 100000n,
+          amountGranularity: 0,
         },
         {
           user: user1.address,
+          disputeWindow: 3600,
+          agent: agent1.address,
+          notBefore: currentTime,
+          notAfter: currentTime + 86400,
           totalAmount: 200000n, // Different amount
-          disputeWindow: 3600,
-          agent: agent1.address,
-          notBefore: currentTime,
-          notAfter: currentTime + 86400,
+          amountGranularity: 0,
         },
         {
           user: user1.address,
-          totalAmount: 100000n,
           disputeWindow: 7200, // Different dispute window
           agent: agent1.address,
           notBefore: currentTime,
           notAfter: currentTime + 86400,
+          totalAmount: 100000n,
+          amountGranularity: 0,
         },
         {
           user: user1.address,
-          totalAmount: 100000n,
           disputeWindow: 3600,
           agent: agent1.address,
           notBefore: currentTime,
           notAfter: currentTime + 172800, // Different notAfter
+          totalAmount: 100000n,
+          amountGranularity: 0,
         },
       ];
 
@@ -1494,6 +1627,161 @@ describe("ZeroLC - Authorization Scope Registration", function () {
       // All hashes should be unique
       const uniqueHashes = new Set(hashes);
       expect(uniqueHashes.size).to.equal(scopes.length);
+    });
+  });
+
+  describe("3.6 Amount Granularity", function () {
+    it("should register scope with granularity 3 and scale correctly", async function () {
+      const { zeroLC, user1, agent1, createAuthorizationScope, depositForUser, getAuthorizationScopeData, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 1000000n; // 1,000,000 (divisible by 10^3)
+      const granularity = 3;
+      await depositForUser(user1, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(
+        user1,
+        agent1,
+        totalAmount,
+        3600,
+        undefined,
+        undefined,
+        granularity
+      );
+
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const scopeState = await zeroLC.authorizationScopes(scopeHash);
+      const scopeData = await getAuthorizationScopeData(scopeHash);
+
+      // Verify scaled amount is stored (1,000,000 / 1000 = 1000)
+      const expectedScaledAmount = calculateScaledAmount(totalAmount, granularity);
+      expect(scopeState.remainingAmount).to.equal(expectedScaledAmount);
+
+      // Verify authorizationScopeData mapping
+      expect(scopeData.totalAmount).to.equal(totalAmount);
+      expect(scopeData.disputeWindow).to.equal(3600);
+      expect(scopeData.amountGranularity).to.equal(granularity);
+    });
+
+    it("should register scope with granularity 6 (USDC-like)", async function () {
+      const { zeroLC, user1, agent1, createAuthorizationScope, depositForUser, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 1000000000n; // 1,000,000,000 (divisible by 10^6)
+      const granularity = 6;
+      await depositForUser(user1, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(
+        user1,
+        agent1,
+        totalAmount,
+        3600,
+        undefined,
+        undefined,
+        granularity
+      );
+
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const scopeState = await zeroLC.authorizationScopes(scopeHash);
+
+      // Verify scaled amount (1,000,000,000 / 1,000,000 = 1000)
+      const expectedScaledAmount = calculateScaledAmount(totalAmount, granularity);
+      expect(scopeState.remainingAmount).to.equal(expectedScaledAmount);
+    });
+
+    it("should register scope with granularity 12 (high precision)", async function () {
+      const { zeroLC, user1, agent1, createAuthorizationScope, depositForUser, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 1000000000000000n; // 10^15 (divisible by 10^12)
+      const granularity = 12;
+      await depositForUser(user1, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(
+        user1,
+        agent1,
+        totalAmount,
+        3600,
+        undefined,
+        undefined,
+        granularity
+      );
+
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const scopeState = await zeroLC.authorizationScopes(scopeHash);
+
+      // Verify scaled amount (10^15 / 10^12 = 1000)
+      const expectedScaledAmount = calculateScaledAmount(totalAmount, granularity);
+      expect(scopeState.remainingAmount).to.equal(expectedScaledAmount);
+    });
+
+    it("should auto-deposit with granularity 3", async function () {
+      const { zeroLC, gasToken, user1, agent1, createAuthorizationScope } =
+        await loadFixture(deployZeroLCFixture);
+
+      const initialDeposit = 500000n; // 500,000
+      const totalAmount = 2000000n; // 2,000,000 (divisible by 10^3)
+      const granularity = 3;
+      const amountNeeded = totalAmount - initialDeposit;
+
+      // Deposit only partial amount
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), initialDeposit);
+      await zeroLC.connect(user1)["deposit(uint256)"](initialDeposit);
+
+      // Approve full amount for auto-deposit
+      await gasToken.connect(user1).approve(await zeroLC.getAddress(), totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(
+        user1,
+        agent1,
+        totalAmount,
+        3600,
+        undefined,
+        undefined,
+        granularity
+      );
+
+      // Should trigger auto-deposit
+      await expect(zeroLC.registerAuthorizationScope(scope, signature))
+        .to.emit(zeroLC, "Deposit")
+        .withArgs(user1.address, amountNeeded);
+
+      // Verify scope was registered successfully with scaled amount
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const scopeState = await zeroLC.authorizationScopes(scopeHash);
+      const expectedScaledAmount = totalAmount / 1000n; // granularity 3
+      expect(scopeState.remainingAmount).to.equal(expectedScaledAmount);
+    });
+
+    it("should emit AuthorizationScopeRegistered with correct scopeHash for non-zero granularity", async function () {
+      const { zeroLC, user1, agent1, createAuthorizationScope, depositForUser } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 3000000n; // Divisible by 10^6
+      const granularity = 6;
+      await depositForUser(user1, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(
+        user1,
+        agent1,
+        totalAmount,
+        3600,
+        undefined,
+        undefined,
+        granularity
+      );
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      await expect(zeroLC.registerAuthorizationScope(scope, signature))
+        .to.emit(zeroLC, "AuthorizationScopeRegistered")
+        .withArgs(user1.address, agent1.address, scopeHash);
     });
   });
 });
