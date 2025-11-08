@@ -64,28 +64,43 @@ import "./UniversalSigValidator.sol";
 
 struct AuthorizationScope {
     address user;
-    uint48 totalAmount;
-    uint48 disputeWindow; // in seconds
+    uint40 disputeWindow; // in seconds
     address agent;
-    uint48 notBefore;
-    uint48 notAfter;
+    uint40 notBefore;
+    uint40 notAfter;
+    uint128 totalAmount;
+    // Used to calculate minimum chargable amount
+    // totalAmount / 10 ^ amountGranularity must fit in uint32
+    uint8 amountGranularity;
 }
+
+uint24 constant FLAG_SCOPE_STATUS_NUM_CHARGES_RECORDED = 1 << 23;
+uint24 constant FLAG_SCOPE_STATUS_DEACTIVATED = 1 << 22;
 
 // NOTE: Keep size of the struct under 256 bits
 struct AuthorizationScopeState {
-    uint48 remainingAmount;
-    uint48 agentPendingAmount;
-    uint24 nonce;
-    uint24 withdrawalNonce; // Tracks the last charge nonce that has been withdrawn
-    uint48 notAfter;
-    uint48 lastChargeTimestamp;
-    uint8 isNumChargesRecorded;
+    // Amounts in this struct are scaled down by 10 ^ amountGranularity
+    uint32 remainingAmount;
+    uint32 chargedAmountWithdrawable;
+    // When finalizationTimestamp is out of dispute window:
+    // * Move chargedAmountFinalizing to chargedAmountWithdrawable
+    // * Move chargedAmountPending to chargedAmountWithdrawable
+    // * Set finalizationTimestamp to lastChargeTimestamp
+    // (Optimize and skip steps when possible)
+    uint32 chargedAmountFinalizing;
+    // New charges are added to chargedAmountPending
+    uint32 chargedAmountPending;
+    uint40 notAfter;
+    // Timestamps are negative offset from notAfter, e.g. realFinalizationTimestamp = notAfter - finalizationTimestamp
+    uint32 finalizationTimestamp;
+    uint32 lastChargeTimestamp;
+    uint24 nonceAndFlags;
 }
 
 struct ChargeEntry {
-    uint48 amount;
+    uint32 scaledAmount; // SCALED amount (divided by 10^amountGranularity)
     uint24 nonce;
-    uint48 notAfter;
+    uint40 notAfter;
 }
 
 // Rationale: Allows facilitator to batch charges with optimized gas cost and requires only single HTTP request per charge
@@ -99,7 +114,7 @@ struct ChargeBatchVerifier {
 struct ChargeBatch {
     AuthorizationScope scope;
     ChargeEntry[] entries;
-    uint48 timestamp;
+    uint40 timestamp;
     bytes agentSignature; // Signature of keccak256(abi.encode(constructed ChargeBatchVerifier))
 }
 
@@ -111,9 +126,16 @@ struct UserState {
     bytes32[] authorizationScopeHashes;
 }
 
+struct AuthorizationScopeData {
+    uint128 totalAmount; // Original unscaled total amount
+    uint40 disputeWindow;
+    uint8 amountGranularity;
+    // Remaining bits unused (80 bits free for future use)
+}
+
 struct Dispute {
     ChargeBatch chargeBatch;
-    uint48 amountToClawback;
+    uint32 amountToClawback; // SCALED amount (divided by 10^amountGranularity)
     bytes signature;
 }
 
@@ -165,6 +187,8 @@ contract ZeroLC is
     error NonContinuousNonceSequence();
     error ChargesExceedPendingAmount();
     error NoWithdrawableBalance();
+    error InvalidAmountGranularity();
+    error InvalidTimestampRange();
 
     bytes32 public constant ROLE_OPERATOR = keccak256("ROLE_OPERATOR");
 
@@ -209,6 +233,7 @@ contract ZeroLC is
     mapping(address => UserState) public userStates;
     mapping(address => bytes32[]) public agentAuthorizationScopes;
     mapping(bytes32 => AuthorizationScopeState) public authorizationScopes;
+    mapping(bytes32 => AuthorizationScopeData) public authorizationScopeData;
     mapping(bytes32 => bool) public disputedCharges;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -217,7 +242,10 @@ contract ZeroLC is
         address _universalSigValidator
     ) EIP712("ZeroLC", "1") {
         require(_gasToken != address(0), InvalidGasTokenAddress());
-        require(_universalSigValidator != address(0), InvalidUniversalSigValidatorAddress());
+        require(
+            _universalSigValidator != address(0),
+            InvalidUniversalSigValidatorAddress()
+        );
         gasToken = IERC20(_gasToken);
         universalSigValidator = UniversalSigValidator(_universalSigValidator);
         _disableInitializers();
@@ -237,6 +265,87 @@ contract ZeroLC is
         return keccak256(abi.encode(_domainSeparatorV4(), scope));
     }
 
+    // ============ Helper Functions ============
+
+    // Nonce and flags manipulation
+    function _getNonce(uint24 nonceAndFlags) private pure returns (uint24) {
+        return nonceAndFlags & 0x3FFFFF; // Lower 22 bits
+    }
+
+    function _setNonce(
+        uint24 nonceAndFlags,
+        uint24 newNonce
+    ) private pure returns (uint24) {
+        return (nonceAndFlags & 0xC00000) | (newNonce & 0x3FFFFF); // Preserve upper 2 bits (flags), set lower 22 bits
+    }
+
+    function _setFlag(
+        uint24 nonceAndFlags,
+        uint24 flag
+    ) private pure returns (uint24) {
+        return nonceAndFlags | flag;
+    }
+
+    function _clearFlag(
+        uint24 nonceAndFlags,
+        uint24 flag
+    ) private pure returns (uint24) {
+        return nonceAndFlags & ~flag;
+    }
+
+    // Amount scaling
+    function _unscaleAmount(
+        uint32 scaledAmount,
+        uint8 granularity
+    ) private pure returns (uint128) {
+        return uint128(scaledAmount) * uint128(10 ** granularity);
+    }
+
+    // Timestamp offset manipulation
+    // Timestamps are stored as negative offsets from notAfter to fit in uint32
+    function _getTimestampOffset(
+        uint40 notAfter,
+        uint40 timestamp
+    ) private pure returns (uint32) {
+        return uint32(notAfter - timestamp);
+    }
+
+    function _getTimestampFromOffset(
+        uint40 notAfter,
+        uint32 offset
+    ) private pure returns (uint40) {
+        return notAfter - offset;
+    }
+
+    // State transition helper
+    // Moves amounts through the pipeline: pending -> finalizing -> withdrawable
+    function _updateFinalizationState(
+        AuthorizationScopeState memory state,
+        uint40 disputeWindow
+    ) private view returns (AuthorizationScopeState memory) {
+        // Calculate real finalization timestamp from offset
+        uint40 realFinalizationTimestamp = _getTimestampFromOffset(
+            state.notAfter,
+            state.finalizationTimestamp
+        );
+
+        // Check if finalization timestamp is past dispute window
+        if (block.timestamp >= realFinalizationTimestamp + disputeWindow) {
+            // Move chargedAmountFinalizing to withdrawable
+            state.chargedAmountWithdrawable += state.chargedAmountFinalizing;
+
+            // Move chargedAmountPending to finalizing
+            state.chargedAmountFinalizing = state.chargedAmountPending;
+            state.chargedAmountPending = 0;
+
+            // Update finalizationTimestamp to lastChargeTimestamp (both are offsets)
+            state.finalizationTimestamp = state.lastChargeTimestamp;
+        }
+        return state;
+    }
+
+    // ============ End Helper Functions ============
+
     function compactUserAuthorizationStates(address user) internal {
         UserState storage userState = userStates[user];
         bytes32[] storage scopeHashes = userState.authorizationScopeHashes;
@@ -247,17 +356,30 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            if (uint48(block.timestamp) < state.notAfter || state.nonce == 0) {
+            uint24 nonce = _getNonce(state.nonceAndFlags);
+            if (uint40(block.timestamp) < state.notAfter || nonce == 0) {
                 i++;
                 continue;
             }
             if (state.remainingAmount > 0) {
-                balance += state.remainingAmount;
+                // Need to unscale the remaining amount before adding to balance
+                AuthorizationScopeData
+                    memory scopeData = authorizationScopeData[scopeHash];
+                balance += _unscaleAmount(
+                    state.remainingAmount,
+                    scopeData.amountGranularity
+                );
                 state.remainingAmount = 0;
             }
-            if (state.isNumChargesRecorded == 0) {
-                numCharges += state.nonce - 1;
-                state.isNumChargesRecorded = 1;
+            if (
+                (state.nonceAndFlags &
+                    FLAG_SCOPE_STATUS_NUM_CHARGES_RECORDED) == 0
+            ) {
+                numCharges += nonce - 1;
+                state.nonceAndFlags = _setFlag(
+                    state.nonceAndFlags,
+                    FLAG_SCOPE_STATUS_NUM_CHARGES_RECORDED
+                );
             }
             authorizationScopes[scopeHash] = state;
             // Delete scope hash - swap with last element and pop
@@ -277,24 +399,46 @@ contract ZeroLC is
             keccak256(
                 abi.encode(
                     keccak256(
-                        "AuthorizationScope(address user,uint48 totalAmount,uint48 disputeWindow,address agent,uint48 notBefore,uint48 notAfter)"
+                        "AuthorizationScope(address user,uint40 disputeWindow,address agent,uint40 notBefore,uint40 notAfter,uint128 totalAmount,uint8 amountGranularity)"
                     ),
                     scope.user,
-                    scope.totalAmount,
                     scope.disputeWindow,
                     scope.agent,
                     scope.notBefore,
-                    scope.notAfter
+                    scope.notAfter,
+                    scope.totalAmount,
+                    scope.amountGranularity
                 )
             )
         );
-        require(universalSigValidator.isValidSig(scope.user, digest, signature), InvalidScopeSignature());
+        require(
+            universalSigValidator.isValidSig(scope.user, digest, signature),
+            InvalidScopeSignature()
+        );
         require(block.timestamp < scope.notAfter, AuthorizationScopeExpired());
-        require(scope.notBefore <= block.timestamp, AuthorizationScopeNotYetActive());
+        require(
+            scope.notBefore <= block.timestamp,
+            AuthorizationScopeNotYetActive()
+        );
         require(scope.totalAmount > 0, InvalidTotalAmount());
         require(scope.disputeWindow > 0, InvalidDisputeWindow());
         require(scope.agent != address(0), InvalidAgentAddress());
         require(scope.user != scope.agent, UserCannotBeOwnAgent());
+
+        // Validate amountGranularity
+        uint32 scaledTotalAmount = uint32(
+            scope.totalAmount / (10 ** scope.amountGranularity)
+        );
+        require(
+            uint128(scaledTotalAmount) * (10 ** scope.amountGranularity) ==
+                scope.totalAmount,
+            InvalidAmountGranularity()
+        );
+
+        // Validate timestamp range fits in uint32
+        require(scope.notAfter > scope.notBefore, InvalidTimestampRange());
+        uint40 timeRange = scope.notAfter - scope.notBefore;
+        require(timeRange <= type(uint32).max, InvalidTimestampRange());
         compactUserAuthorizationStates(scope.user);
         UserState storage userState = userStates[scope.user];
         if (scope.totalAmount > userState.balance) {
@@ -307,15 +451,32 @@ contract ZeroLC is
         }
         require(scope.totalAmount <= userState.balance, InsufficientBalance());
         bytes32 scopeHash = getScopeHash(scope);
-        require(authorizationScopes[scopeHash].notAfter == 0, ScopeAlreadyRegistered());
+        require(
+            authorizationScopes[scopeHash].notAfter == 0,
+            ScopeAlreadyRegistered()
+        );
+
+        // Store authorization scope data for later retrieval
+        authorizationScopeData[scopeHash] = AuthorizationScopeData({
+            totalAmount: scope.totalAmount,
+            disputeWindow: scope.disputeWindow,
+            amountGranularity: scope.amountGranularity
+        });
+
+        // Calculate timestamp offsets
+        // finalizationTimestamp: offset to notBefore (earliest possible finalization time)
+        // lastChargeTimestamp: offset to current time (no charges yet)
+        uint40 currentTime = uint40(block.timestamp);
+
         authorizationScopes[scopeHash] = AuthorizationScopeState({
-            remainingAmount: scope.totalAmount,
-            agentPendingAmount: 0,
-            nonce: 1,
-            withdrawalNonce: 0,
+            remainingAmount: scaledTotalAmount,
+            chargedAmountWithdrawable: 0,
+            chargedAmountFinalizing: 0,
+            chargedAmountPending: 0,
             notAfter: scope.notAfter,
-            lastChargeTimestamp: 0,
-            isNumChargesRecorded: 0
+            finalizationTimestamp: uint32(scope.notAfter - scope.notBefore), // Offset to notBefore
+            lastChargeTimestamp: uint32(scope.notAfter - currentTime), // Offset to now
+            nonceAndFlags: _setNonce(0, 1) // Start with nonce=1, flags=0
         });
         userState.balance -= scope.totalAmount;
         userState.authorizationScopeHashes.push(scopeHash);
@@ -336,8 +497,11 @@ contract ZeroLC is
                 )
             )
         );
-        require(universalSigValidator.isValidSig(scope.user, digest, signature), InvalidScopeSignature());
-        uint48 newNotAfter = uint48(block.timestamp) + 300;
+        require(
+            universalSigValidator.isValidSig(scope.user, digest, signature),
+            InvalidScopeSignature()
+        );
+        uint40 newNotAfter = uint40(block.timestamp) + 300;
         AuthorizationScopeState memory state = authorizationScopes[scopeHash];
         require(state.notAfter > newNotAfter, ScopeNotActive());
         require(state.remainingAmount > 0, ScopeAlreadyExhausted());
@@ -384,28 +548,54 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            require(block.timestamp < state.notAfter, AuthorizationScopeExpired());
-            require(chargeBatch.timestamp > state.lastChargeTimestamp, BatchTimestampNotIncreasing());
-            uint48 totalAmount = 0;
-            uint24 nonce = state.nonce;
+            require(
+                block.timestamp < state.notAfter,
+                AuthorizationScopeExpired()
+            );
+            state = _updateFinalizationState(
+                state,
+                chargeBatch.scope.disputeWindow
+            );
+
+            // Convert stored timestamp offset back to real timestamp for comparison
+            uint40 realLastChargeTimestamp = _getTimestampFromOffset(
+                state.notAfter,
+                state.lastChargeTimestamp
+            );
+            require(
+                chargeBatch.timestamp > realLastChargeTimestamp,
+                BatchTimestampNotIncreasing()
+            );
+
+            uint32 totalScaledAmount = 0;
+            uint24 nonce = _getNonce(state.nonceAndFlags);
             for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
                 ChargeEntry memory entry = chargeBatch.entries[j];
                 require(entry.nonce == nonce, InvalidNonce());
                 require(block.timestamp < entry.notAfter, ChargeEntryExpired());
-                require(entry.amount > 0, InvalidChargeAmount());
-                totalAmount += entry.amount;
+                require(entry.scaledAmount > 0, InvalidChargeAmount());
+                totalScaledAmount += entry.scaledAmount;
                 nonce += 1;
             }
-            uint48 remainingAmount = state.remainingAmount;
-            require(totalAmount <= remainingAmount, InsufficientBalance());
+            // TODO: Check dispute window and move amounts as needed
+            uint32 remainingAmount = state.remainingAmount;
+            require(
+                totalScaledAmount <= remainingAmount,
+                InsufficientBalance()
+            );
             authorizationScopes[scopeHash] = AuthorizationScopeState({
-                remainingAmount: remainingAmount - totalAmount,
-                agentPendingAmount: state.agentPendingAmount + totalAmount,
-                nonce: nonce,
-                withdrawalNonce: state.withdrawalNonce,
+                remainingAmount: remainingAmount - totalScaledAmount,
+                chargedAmountWithdrawable: state.chargedAmountWithdrawable,
+                chargedAmountFinalizing: state.chargedAmountFinalizing,
+                chargedAmountPending: state.chargedAmountPending +
+                    totalScaledAmount,
                 notAfter: state.notAfter,
-                lastChargeTimestamp: chargeBatch.timestamp,
-                isNumChargesRecorded: state.isNumChargesRecorded
+                finalizationTimestamp: state.finalizationTimestamp,
+                lastChargeTimestamp: _getTimestampOffset(
+                    state.notAfter,
+                    chargeBatch.timestamp
+                ),
+                nonceAndFlags: _setNonce(state.nonceAndFlags, nonce)
             });
         }
         // TODO: Due to EIP-7702, this check is no longer reliable, we need to change it to check whether sender is EOA
@@ -429,12 +619,15 @@ contract ZeroLC is
                     chargeBatch.scope.disputeWindow,
                 DisputeWindowExpired()
             );
-            require(chargeBatch.timestamp <= block.timestamp, FutureChargeBatch());
+            require(
+                chargeBatch.timestamp <= block.timestamp,
+                FutureChargeBatch()
+            );
             bytes32 digest = _hashTypedDataV4(
                 keccak256(
                     abi.encode(
                         keccak256(
-                            "Dispute(bytes32 scopeHash,uint48 amountToClawback)"
+                            "Dispute(bytes32 scopeHash,uint32 amountToClawback)"
                         ),
                         scopeHash,
                         d.amountToClawback
@@ -449,12 +642,15 @@ contract ZeroLC is
                 ),
                 InvalidDisputeSignature()
             );
-            uint48 totalChargedAmount = 0;
+            uint32 totalChargedAmount = 0;
             for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
                 ChargeEntry memory entry = chargeBatch.entries[j];
-                totalChargedAmount += entry.amount;
+                totalChargedAmount += entry.scaledAmount;
             }
-            require(totalChargedAmount >= d.amountToClawback, ClawbackExceedsBatchTotal());
+            require(
+                totalChargedAmount >= d.amountToClawback,
+                ClawbackExceedsBatchTotal()
+            );
             bytes32 disputeHash = keccak256(
                 abi.encode(
                     chargeBatch.scope,
@@ -466,19 +662,56 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            require(state.agentPendingAmount >= d.amountToClawback, InsufficientPendingBalance());
-            state.agentPendingAmount -= d.amountToClawback;
-            state.notAfter = uint48(block.timestamp);
+
+            // Cascading deduction: chargedAmountWithdrawable cannot be clawed back (finalized)
+            // Deduct from chargedAmountFinalizing first, then chargedAmountPending
+            uint32 remaining = d.amountToClawback;
+            uint32 newFinalizing = state.chargedAmountFinalizing;
+            uint32 newPending = state.chargedAmountPending;
+
+            // Deduct from finalizing first
+            if (remaining > 0 && newFinalizing > 0) {
+                uint32 fromFinalizing = remaining > newFinalizing
+                    ? newFinalizing
+                    : remaining;
+                newFinalizing -= fromFinalizing;
+                remaining -= fromFinalizing;
+            }
+
+            // Then deduct from pending
+            if (remaining > 0 && newPending > 0) {
+                uint32 fromPending = remaining > newPending
+                    ? newPending
+                    : remaining;
+                newPending -= fromPending;
+                remaining -= fromPending;
+            }
+
+            require(remaining == 0, InsufficientPendingBalance());
+
+            state.chargedAmountFinalizing = newFinalizing;
+            state.chargedAmountPending = newPending;
+            state.notAfter = uint40(block.timestamp);
             authorizationScopes[scopeHash] = state;
+
+            // Need to unscale the clawback amount for user balance
+            AuthorizationScopeData memory scopeData = authorizationScopeData[
+                scopeHash
+            ];
+            uint128 unscaledClawback = _unscaleAmount(
+                d.amountToClawback,
+                scopeData.amountGranularity
+            );
+
             UserState storage userState = userStates[chargeBatch.scope.user];
-            userState.balance += d.amountToClawback;
+            userState.balance += unscaledClawback;
             userState.numDisputes += 1;
             disputedCharges[disputeHash] = true;
             emit ChargeDisputed(
                 chargeBatch.scope.user,
                 chargeBatch.scope.agent,
                 scopeHash,
-                d.amountToClawback
+                unscaledClawback
             );
         }
     }
@@ -500,14 +733,19 @@ contract ZeroLC is
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    keccak256("Deposit(address user,uint256 amount,uint256 nonce)"),
+                    keccak256(
+                        "Deposit(address user,uint256 amount,uint256 nonce)"
+                    ),
                     user,
                     amount,
                     nonce
                 )
             )
         );
-        require(universalSigValidator.isValidSig(user, digest, signature), InvalidDepositSignature());
+        require(
+            universalSigValidator.isValidSig(user, digest, signature),
+            InvalidDepositSignature()
+        );
         userStates[user].nonce = nonce + 1;
         _depositInternal(user, amount);
     }
@@ -530,7 +768,13 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            balance += state.remainingAmount;
+            AuthorizationScopeData memory scopeData = authorizationScopeData[
+                scopeHash
+            ];
+            balance += _unscaleAmount(
+                state.remainingAmount,
+                scopeData.amountGranularity
+            );
         }
         return balance;
     }
@@ -550,7 +794,13 @@ contract ZeroLC is
             if (block.timestamp < state.notAfter) {
                 continue;
             }
-            balance += state.remainingAmount;
+            AuthorizationScopeData memory scopeData = authorizationScopeData[
+                scopeHash
+            ];
+            balance += _unscaleAmount(
+                state.remainingAmount,
+                scopeData.amountGranularity
+            );
         }
         return balance;
     }
@@ -564,187 +814,77 @@ contract ZeroLC is
     // Public function for agent to directly withdraw funds
     function withdrawAgentChargedFund(
         AuthorizationScope calldata scope,
-        bool toWallet,
-        ChargeBatch[] calldata recentCharges
+        bool toWallet
     ) external nonReentrant {
         bytes32 scopeHash = getScopeHash(scope);
         require(msg.sender == scope.agent, CallerNotAgent());
-        _withdrawAgentChargedFundInternal(scope, scopeHash, toWallet, recentCharges);
+        _withdrawAgentChargedFundInternal(scope, scopeHash, toWallet);
     }
 
     // Public function for third-party to submit withdrawal with agent's signature
     function withdrawAgentChargedFund(
         AuthorizationScope calldata scope,
         bool toWallet,
-        ChargeBatch[] calldata recentCharges,
         bytes calldata signature
     ) external nonReentrant {
         bytes32 scopeHash = getScopeHash(scope);
-        bytes32 recentChargesHash = keccak256(abi.encode(recentCharges));
         uint256 nonce = userStates[scope.agent].nonce;
 
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    keccak256("WithdrawAgentChargedFund(bytes32 scopeHash,bool toWallet,bytes32 recentChargesHash,uint256 nonce)"),
+                    keccak256(
+                        "WithdrawAgentChargedFund(bytes32 scopeHash,bool toWallet,uint256 nonce)"
+                    ),
                     scopeHash,
                     toWallet,
-                    recentChargesHash,
                     nonce
                 )
             )
         );
 
-        require(universalSigValidator.isValidSig(scope.agent, digest, signature), InvalidWithdrawalSignature());
+        require(
+            universalSigValidator.isValidSig(scope.agent, digest, signature),
+            InvalidWithdrawalSignature()
+        );
 
         userStates[scope.agent].nonce = nonce + 1;
-        _withdrawAgentChargedFundInternal(scope, scopeHash, toWallet, recentCharges);
-    }
-
-    // View function to get withdrawable amount using simple method
-    function getWithdrawableAmountSimple(
-        AuthorizationScope calldata scope
-    ) public view returns (uint48) {
-        bytes32 scopeHash = getScopeHash(scope);
-        return _calculateWithdrawableSimple(scopeHash, scope.disputeWindow);
-    }
-
-    // View function to get withdrawable amount using detailed method
-    function getWithdrawableAmountDetailed(
-        AuthorizationScope calldata scope,
-        ChargeBatch[] calldata recentCharges
-    ) public view returns (uint48) {
-        bytes32 scopeHash = getScopeHash(scope);
-        AuthorizationScopeState memory state = authorizationScopes[scopeHash];
-        (uint48 withdrawable, ) = _calculateWithdrawableDetailed(
-            scopeHash,
-            scope,
-            recentCharges,
-            state.withdrawalNonce
-        );
-        return withdrawable;
+        _withdrawAgentChargedFundInternal(scope, scopeHash, toWallet);
     }
 
     // View function to get agent's pending amount for a scope
     function getAgentPendingAmount(
         AuthorizationScope calldata scope
-    ) public view returns (uint48) {
+    ) public view returns (uint128) {
         bytes32 scopeHash = getScopeHash(scope);
-        return authorizationScopes[scopeHash].agentPendingAmount;
-    }
-
-    // View function to get agent's withdrawal nonce for a scope
-    function getAgentWithdrawalNonce(
-        AuthorizationScope calldata scope
-    ) public view returns (uint24) {
-        bytes32 scopeHash = getScopeHash(scope);
-        return authorizationScopes[scopeHash].withdrawalNonce;
-    }
-
-    // Internal helper function for simple withdrawal calculation
-    function _calculateWithdrawableSimple(
-        bytes32 scopeHash,
-        uint48 disputeWindow
-    ) internal view returns (uint48) {
         AuthorizationScopeState memory state = authorizationScopes[scopeHash];
-
-        // If last charge is outside dispute window, all pending is withdrawable
-        if (block.timestamp >= state.lastChargeTimestamp + disputeWindow) {
-            return state.agentPendingAmount;
-        }
-        return 0; // Conservative: nothing withdrawable if any charge in window
-    }
-
-    // Internal helper function for detailed withdrawal calculation
-    function _calculateWithdrawableDetailed(
-        bytes32 scopeHash,
-        AuthorizationScope calldata scope,
-        ChargeBatch[] calldata recentCharges,
-        uint24 currentWithdrawalNonce
-    ) internal view returns (uint48 withdrawable, uint24 newWithdrawalNonce) {
-        AuthorizationScopeState memory state = authorizationScopes[scopeHash];
-
-        uint48 totalWithdrawableCharges = 0;
-        uint24 expectedNonce = currentWithdrawalNonce + 1;
-        uint24 highestNonce = currentWithdrawalNonce;
-
-        // Process all provided charge batches and verify they are past dispute window
-        for (uint256 i = 0; i < recentCharges.length; i++) {
-            ChargeBatch calldata batch = recentCharges[i];
-
-            // Verify charge batch signature
-            verifyChargeBatchSignature(batch);
-
-            // Verify batch scope matches
-            require(getScopeHash(batch.scope) == scopeHash, ScopeMismatch());
-
-            // Verify batch timestamp is valid (not in future)
-            require(batch.timestamp <= block.timestamp, FutureChargeBatch());
-
-            // Reject if this batch is still within dispute window
-            require(
-                batch.timestamp <= block.timestamp - scope.disputeWindow,
-                BatchStillInDisputeWindow()
-            );
-
-            // Process each entry in the batch
-            for (uint256 j = 0; j < batch.entries.length; j++) {
-                ChargeEntry memory entry = batch.entries[j];
-
-                // Verify nonce continuity - must be sequential with no gaps
-                require(entry.nonce == expectedNonce, NonContinuousNonceSequence());
-
-                totalWithdrawableCharges += entry.amount;
-
-                expectedNonce++;
-                if (entry.nonce > highestNonce) {
-                    highestNonce = entry.nonce;
-                }
-            }
-        }
-
-        // Verify that total provided charges don't exceed pending amount
-        require(totalWithdrawableCharges <= state.agentPendingAmount, ChargesExceedPendingAmount());
-
-        // All provided charges are withdrawable (since all are past dispute window)
-        withdrawable = totalWithdrawableCharges;
-        newWithdrawalNonce = highestNonce;
-
-        return (withdrawable, newWithdrawalNonce);
+        uint32 totalScaled = state.chargedAmountPending +
+            state.chargedAmountFinalizing;
+        return _unscaleAmount(totalScaled, scope.amountGranularity);
     }
 
     // Internal core withdrawal logic
     function _withdrawAgentChargedFundInternal(
         AuthorizationScope calldata scope,
         bytes32 scopeHash,
-        bool toWallet,
-        ChargeBatch[] calldata recentCharges
+        bool toWallet
     ) internal {
-        AuthorizationScopeState storage state = authorizationScopes[scopeHash];
+        AuthorizationScopeState memory state = authorizationScopes[scopeHash];
 
-        // Calculate withdrawable amount
-        uint48 withdrawable;
-        uint24 newWithdrawalNonce = state.withdrawalNonce;
+        // Update finalization state (moves amounts through pipeline)
+        state = _updateFinalizationState(state, scope.disputeWindow);
 
-        if (recentCharges.length == 0) {
-            withdrawable = _calculateWithdrawableSimple(scopeHash, scope.disputeWindow);
-            // Simple method: update withdrawalNonce to current nonce - 1
-            // (all charges up to nonce-1 are considered withdrawn)
-            newWithdrawalNonce = state.nonce - 1;
-        } else {
-            (withdrawable, newWithdrawalNonce) = _calculateWithdrawableDetailed(
-                scopeHash,
-                scope,
-                recentCharges,
-                state.withdrawalNonce
-            );
-        }
+        uint32 withdrawableScaled = state.chargedAmountWithdrawable;
+        require(withdrawableScaled > 0, NoWithdrawableBalance());
 
-        require(withdrawable > 0, NoWithdrawableBalance());
+        // Clear withdrawable amount
+        state.chargedAmountWithdrawable = 0;
 
-        // Update state
-        state.agentPendingAmount -= withdrawable;
-        state.withdrawalNonce = newWithdrawalNonce;
+        // Unscale amount for transfer
+        uint128 withdrawable = _unscaleAmount(
+            withdrawableScaled,
+            scope.amountGranularity
+        );
 
         // Transfer or credit
         if (toWallet) {
@@ -752,6 +892,7 @@ contract ZeroLC is
         } else {
             userStates[scope.agent].balance += withdrawable;
         }
+        authorizationScopes[scopeHash] = state;
 
         emit AgentWithdrawal(scope.agent, scopeHash, withdrawable, toWallet);
     }
