@@ -23,6 +23,7 @@ import "hardhat-deploy";
 import { ethers } from "ethers";
 
 import "./tasks/refund";
+import "./tasks/paymasterDeposit";
 
 interface NetworkConfigExtra {
   gasTokenAddress?: `0x${string}`;
@@ -274,29 +275,17 @@ const config: HardhatUserConfig = {
           },
         },
       },
+      {
+        version: "0.8.30",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1000000,
+          },
+          viaIR: true,
+        },
+      },
     ],
-    overrides: {
-      "contracts/ZeroLC.sol": {
-        version: "0.8.30",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 1000000,
-          },
-          viaIR: true,
-        },
-      },
-      "contracts/test/SettlementCaller.sol": {
-        version: "0.8.30",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 1000000,
-          },
-          viaIR: true,
-        },
-      },
-    },
   },
   namedAccounts: {
     owner: {
@@ -319,7 +308,7 @@ const config: HardhatUserConfig = {
     clear: true,
     flat: true,
     format: "json",
-    except: ["Ownable.sol", "ECDSA.sol", "EIP712.sol"],
+    except: ["Ownable.sol", "ECDSA.sol", "EIP712.sol", "IEntryPoint.sol"],
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS ? true : false,
