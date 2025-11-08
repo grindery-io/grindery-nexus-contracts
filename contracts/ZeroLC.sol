@@ -896,4 +896,14 @@ contract ZeroLC is
 
         emit AgentWithdrawal(scope.agent, scopeHash, withdrawable, toWallet);
     }
+
+    // View helper to get nonce from packed nonceAndFlags (lower 22 bits)
+    function getScopeNonce(bytes32 scopeHash) public view returns (uint24) {
+        return _getNonce(authorizationScopes[scopeHash].nonceAndFlags);
+    }
+
+    // View helper to get flags from nonceAndFlags (upper 2 bits)
+    function getScopeFlags(bytes32 scopeHash) public view returns (uint24) {
+        return authorizationScopes[scopeHash].nonceAndFlags & 0xC00000;
+    }
 }

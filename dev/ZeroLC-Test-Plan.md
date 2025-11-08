@@ -9,9 +9,9 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 **Migration Status**:
 - ✅ **Section 3 - Authorization Tests** - UPDATED (49/49 tests passing)
 - ✅ **Section 7 - Balance View Functions** - UPDATED (23/23 tests passing, +6 new granularity tests)
+- ✅ **Section 8 - Compaction Tests** - UPDATED (36/36 tests passing, +13 new tests for granularity & three-state)
 - ⚠️ **Section 5 - Settlement Tests** - NEEDS UPDATE (ChargeEntry field rename, scaling)
 - ⚠️ **Section 6 - Dispute Tests** - NEEDS UPDATE (cascading deduction logic)
-- ⚠️ **Section 8 - Compaction Tests** - NEEDS UPDATE (state field changes)
 - ⚠️ **Section 20 - Withdrawal Tests** - NEEDS COMPLETE REWRITE (obsolete methods)
 
 **Key Changes**:
@@ -398,9 +398,9 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 ---
 
-## 8. Compact User Authorization States
+## 8. Compact User Authorization States ✅ COMPLETED (36 tests)
 
-### 8.1 Compaction Logic
+### 8.1 Compaction Logic ✅ COMPLETED (12 tests)
 
 - [x] Compact with expired scopes returns remainingAmount to balance
 - [x] Compact updates numCharges from nonce (nonce - 1)
@@ -415,7 +415,7 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - [x] Compact with scope where remainingAmount == 0
 - [x] Compact only records numCharges once (isNumChargesRecorded prevents duplicate)
 
-### 8.2 Array Manipulation
+### 8.2 Array Manipulation ✅ COMPLETED (7 tests)
 
 - [x] Compact correctly removes and packs array (swap with last, then pop)
 - [x] Compact handles single element array
@@ -425,12 +425,45 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - [x] Compact with all scopes expired (empties array)
 - [x] Array length decreases correctly
 
-### 8.3 State Updates
+### 8.3 State Updates ✅ COMPLETED (4 tests)
 
 - [x] Compact updates userState.balance in storage
 - [x] Compact updates userState.numCharges in storage
 - [x] Compact clears remainingAmount in authorizationScopes
-- [x] Compact preserves other scope state (agentPendingAmount, notAfter, etc.)
+- [x] Compact preserves other scope state (pending amounts, notAfter, etc.)
+
+### 8.4 Amount Granularity ✅ COMPLETED (6 tests)
+
+- [x] Compact correctly with granularity 3 (1000x scaling)
+- [x] Compact correctly with granularity 6 (USDC-like, 1M scaling)
+- [x] Compact correctly with granularity 12 (high precision)
+- [x] Handle mixed granularities during compaction
+- [x] Verify authorizationScopeData is preserved during compaction
+- [x] Compact with remainingAmount == 0 and granularity > 0
+
+### 8.5 Three-State Amount Fields ✅ COMPLETED (5 tests)
+
+- [x] Initialize three-state amounts to zero on registration
+- [x] Preserve chargedAmountPending during compaction
+- [x] Preserve chargedAmountFinalizing during compaction
+- [x] Preserve chargedAmountWithdrawable during compaction
+- [x] Compact expired scope with pending charges correctly
+
+### 8.6 Helper View Methods ✅ COMPLETED (2 tests)
+
+- [x] getScopeNonce() returns correct nonce values
+- [x] getScopeFlags() returns correct flags
+
+**Updates Applied (2025-01-08)**:
+- ✅ Added `getScopeNonce()` and `getScopeFlags()` helper methods to ZeroLC.sol (lines 897-909)
+- ✅ Updated `registerScope()` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
+- ✅ Updated `createChargeBatch()` helper: renamed `amount` → `scaledAmount`, changed encoding types
+- ✅ Added new helper functions: `calculateScaledAmount()`, `getAuthorizationScopeData()`
+- ✅ Updated all 23 existing tests with amountGranularity parameter and three-state field changes
+- ✅ Added Section 8.4: 6 new tests for amount granularity
+- ✅ Added Section 8.5: 5 new tests for three-state amount fields (pending/finalizing/withdrawable)
+- ✅ Added Section 8.6: 2 new tests for helper view methods
+- ✅ All 36 tests passing
 
 **Bug Fixed**: Critical underflow bug in compaction loop - removed automatic `i++` from for loop and `i--` after removal. Loop now manually controls index: increment when skipping non-expired scopes, stay at same index when removing (to check the swapped element).
 
@@ -866,7 +899,7 @@ test/
 
 **Total Tests**: 300+
 
-**Completed**: 307 tests
+**Completed**: 320 tests
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -889,9 +922,12 @@ test/
 - Section 6.1 - Valid Disputes (11 tests)
 - **Section 7.1 - balanceOf (12 tests - +3 NEW granularity tests)** ✅ UPDATED
 - **Section 7.2 - unlockedBalanceOf (11 tests - +3 NEW granularity tests)** ✅ UPDATED
-- Section 8.1 - Compaction Logic (12 tests)
-- Section 8.2 - Array Manipulation (7 tests)
-- Section 8.3 - State Updates (4 tests)
+- **Section 8.1 - Compaction Logic (12 tests)** ✅ UPDATED
+- **Section 8.2 - Array Manipulation (7 tests)** ✅ UPDATED
+- **Section 8.3 - State Updates (4 tests)** ✅ UPDATED
+- **Section 8.4 - Amount Granularity (6 tests - NEW SECTION)** ✅ NEW
+- **Section 8.5 - Three-State Amount Fields (5 tests - NEW SECTION)** ✅ NEW
+- **Section 8.6 - Helper View Methods (2 tests - NEW SECTION)** ✅ NEW
 - **Section 20.1 - Simple Withdrawal Method (11 tests)** ✅ NEW
 - **Section 20.2 - Detailed Withdrawal Method (19 tests)** ✅ NEW
 - **Section 20.3 - Signature-Based Withdrawal (10 tests)** ✅ NEW
@@ -903,6 +939,22 @@ test/
 **Not Started**: Sections 20.7-20.10 (edge cases, integration, security for withdrawals), plus Sections 1, 9-19, 21
 
 ### Recent Updates
+
+**2025-01-08**: ✅ **Updated Section 8 - Compact User Authorization States** (36 tests total, +13 new)
+- **File**: [test/ZeroLC/ZeroLC.compact.test.ts](test/ZeroLC/ZeroLC.compact.test.ts)
+- **Test Results**: All 36 tests passing
+- **Key Changes**:
+  - ✅ Added `getScopeNonce()` and `getScopeFlags()` helper methods to ZeroLC.sol (lines 897-909)
+  - ✅ Updated `registerScope()` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
+  - ✅ Updated `createChargeBatch()` helper: renamed `amount` → `scaledAmount`, changed encoding types (uint48→uint32)
+  - ✅ Added new helper functions: `calculateScaledAmount()`, `getAuthorizationScopeData()`
+  - ✅ Updated all 23 existing tests with `amountGranularity` parameter and three-state field changes
+  - ✅ Section 8.4: Added 6 new tests for amount granularity (3, 6, 12, mixed, authorizationScopeData preservation)
+  - ✅ Section 8.5: Added 5 new tests for three-state amount fields (pending/finalizing/withdrawable preservation during compaction)
+  - ✅ Section 8.6: Added 2 new tests for helper view methods (`getScopeNonce()`, `getScopeFlags()`)
+  - ✅ Fixed timestamp issues in charge batch creation (added `time.increase(1)` before settlements)
+  - ✅ Fixed three-state withdrawal pipeline flow (requires 2 dispute windows to reach withdrawable state)
+- **Coverage**: Complete coverage of compaction with granularity support and three-state withdrawal amounts
 
 **2025-01-08**: ✅ **Updated Section 7 - Balance View Functions** (23 tests total, +6 new)
 - **File**: [test/ZeroLC/ZeroLC.balances.test.ts](test/ZeroLC/ZeroLC.balances.test.ts)
