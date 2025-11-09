@@ -9,9 +9,9 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 **Migration Status**:
 - ✅ **Section 3 - Authorization Tests** - UPDATED (49/49 tests passing)
 - ✅ **Section 4 - Revocation Tests** - UPDATED (24/24 tests passing, +5 new granularity tests)
+- ✅ **Section 5 - Settlement Tests** - UPDATED (70/70 tests passing, +13 new tests for granularity & three-state)
 - ✅ **Section 7 - Balance View Functions** - UPDATED (23/23 tests passing, +6 new granularity tests)
 - ✅ **Section 8 - Compaction Tests** - UPDATED (36/36 tests passing, +13 new tests for granularity & three-state)
-- ⚠️ **Section 5 - Settlement Tests** - NEEDS UPDATE (ChargeEntry field rename, scaling)
 - ⚠️ **Section 6 - Dispute Tests** - NEEDS UPDATE (cascading deduction logic)
 - ⚠️ **Section 20 - Withdrawal Tests** - NEEDS COMPLETE REWRITE (obsolete methods)
 
@@ -221,22 +221,22 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 ---
 
-## 5. Charge Settlement Tests
+## 5. Charge Settlement Tests ✅ COMPLETED (70 tests)
 
-### 5.1 Valid Settlement
+### 5.1 Valid Settlement ✅ COMPLETED (10 tests)
 
 - [x] Settle single charge batch with one entry
 - [x] Settle single charge batch with multiple entries
 - [x] Settle multiple charge batches in one transaction
 - [x] Settle charges with sequential nonces
-- [x] Settle charges updates remainingAmount correctly
-- [x] Settle charges updates agentPendingAmount correctly
-- [x] Settle charges updates lastChargeTimestamp correctly
+- [x] Settle charges updates remainingAmount correctly (with scaled amounts)
+- [x] Settle charges updates chargedAmountPending correctly
+- [x] Settle charges updates lastChargeTimestamp offset correctly (stored as notAfter - timestamp)
 - [x] Settle charges updates nonce correctly (increments by number of entries)
 - [x] Settle charges emits ChargesSettled() event when tx.origin == msg.sender
-- [x] Settle charges maintains isNumChargesRecorded flag
+- [x] Settle charges maintains FLAG_SCOPE_STATUS_NUM_CHARGES_RECORDED flag
 
-### 5.2 Signature Verification
+### 5.2 Signature Verification ✅ COMPLETED (9 tests)
 
 - [x] Settle with valid agent ECDSA signature
 - [x] Settle with invalid agent signature (should revert)
@@ -248,7 +248,7 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - [x] Settle with tampered scopeHash (should revert)
 - [x] Signature uses correct verifier struct encoding
 
-### 5.3 Timestamp Validation
+### 5.3 Timestamp Validation ✅ COMPLETED (9 tests)
 
 - [x] Settle with timestamp within valid 60-second window
 - [x] Settle with timestamp == block.timestamp - 60 (boundary, should revert)
@@ -256,11 +256,11 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - [x] Settle with timestamp == block.timestamp (boundary, should pass)
 - [x] Settle with timestamp < block.timestamp - 60 (should revert)
 - [x] Settle with timestamp > block.timestamp (should revert)
-- [x] Settle with timestamp <= lastChargeTimestamp (should revert)
+- [x] Settle with timestamp <= lastChargeTimestamp (should revert with BatchTimestampNotIncreasing)
 - [x] Settle with timestamp == lastChargeTimestamp + 1 (boundary)
 - [x] Settle multiple batches with increasing timestamps
 
-### 5.4 Nonce Validation
+### 5.4 Nonce Validation ✅ COMPLETED (7 tests)
 
 - [x] Settle with correct sequential nonces starting from 1
 - [x] Settle with wrong nonce (should revert)
@@ -268,44 +268,87 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - [x] Settle with repeated nonce (should revert)
 - [x] Settle multiple batches incrementing nonces correctly
 - [x] Nonce persists across multiple settlements
-- [x] Nonce starts at 1 for new scope
+- [x] Nonce starts at 1 for new scope (verified via getScopeNonce())
 
-### 5.5 Amount & Balance
+### 5.5 Amount & Balance ✅ COMPLETED (6 tests)
 
 - [x] Settle with totalAmount < remainingAmount
 - [x] Settle with totalAmount == remainingAmount (exact drain)
 - [x] Settle with totalAmount > remainingAmount (should revert)
 - [x] Settle with zero amount entries (should revert)
-- [x] Settle with uint48 max amount (overflow check)
+- [x] Settle with uint32 max scaled amount (overflow check - updated for uint32 scaledAmount)
 - [x] All entries must have amount > 0
 
-### 5.6 Entry Expiration
+### 5.6 Entry Expiration ✅ COMPLETED (5 tests)
 
 - [x] Settle with entry.notAfter > block.timestamp (valid, not expired)
-- [x] Settle with entry.notAfter == block.timestamp (boundary, valid)
+- [x] Settle with entry.notAfter == block.timestamp + 1 (boundary, valid)
+- [x] Settle with entry.notAfter == block.timestamp (boundary, expired)
 - [x] Settle with entry.notAfter < block.timestamp (should revert, expired)
 - [x] Multiple entries with different notAfter values
 
-### 5.7 Scope Status
+### 5.7 Scope Status ✅ COMPLETED (4 tests)
 
 - [x] Settle with active scope (notAfter > block.timestamp)
 - [x] Settle with expired scope (should revert)
 - [x] Settle with scope notAfter == block.timestamp (should revert)
 - [x] Settle with scope notAfter == block.timestamp + 1 (boundary, should pass)
 
-### 5.8 Empty Batch Validation
+### 5.8 Empty Batch Validation ✅ COMPLETED (3 tests)
 
 - [x] Settle with empty chargeBatches array (should revert)
 - [x] Settle with batch containing empty entries array (should revert)
 - [x] verifyChargeBatchSignature validates non-empty entries
 
-### 5.9 Event Emissions
+### 5.9 Event Emissions ✅ COMPLETED (5 tests)
 
 - [x] Settle emits ChargesSettledFromContract when called from contract (tx.origin != msg.sender)
 - [x] Settle does NOT emit ChargesSettled when called from contract
-- [x] ChargesSettledFromContract contains correct encoded data
+- [x] ChargesSettledFromContract contains correct encoded data (with new encoding types)
 - [x] ChargesSettledFromContract works with multiple batches
 - [x] tx.origin vs msg.sender determines which event to emit
+
+### 5.10 Amount Granularity ✅ COMPLETED (5 tests - NEW SECTION)
+
+- [x] Settle with amountGranularity = 0 (no scaling)
+- [x] Settle with amountGranularity = 3 (1000x scaling)
+- [x] Settle with amountGranularity = 6 (USDC-like, 1M scaling)
+- [x] Verify getAgentPendingAmount returns unscaled amounts
+- [x] Handle max uint32 scaled amount
+
+### 5.11 Three-State Pipeline ✅ COMPLETED (3 tests - NEW SECTION)
+
+- [x] New charges go to chargedAmountPending (not finalizing/withdrawable)
+- [x] Multiple settlements accumulate in chargedAmountPending
+- [x] Verify getAgentPendingAmount returns pending + finalizing (not withdrawable)
+
+### 5.12 Timestamp Offset Validation ✅ COMPLETED (2 tests - NEW SECTION)
+
+- [x] lastChargeTimestamp stored as offset from notAfter (notAfter - timestamp)
+- [x] lastChargeTimestamp offset updates correctly on each settlement
+
+### 5.13 Contract Helper Functions ✅ COMPLETED (2 tests - NEW SECTION)
+
+- [x] getScopeNonce() returns correct nonce after settlements
+- [x] getScopeFlags() returns correct flags (FLAG_SCOPE_STATUS_NUM_CHARGES_RECORDED)
+
+**Updates Applied (2025-01-09)**:
+- ✅ Updated `createAuthorizationScope` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
+- ✅ Updated `createChargeBatch` helper: renamed `amount` → `scaledAmount`, changed encoding (uint48→uint32, uint24 nonce, uint40 notAfter)
+- ✅ Added `calculateScaledAmount()` helper function for amount scaling
+- ✅ Added `getAuthorizationScopeData()` helper function to query unscaled scope data
+- ✅ Updated all state assertions (~40 tests): use `getScopeNonce()`, `getAgentPendingAmount()`, validate timestamp offsets
+- ✅ Updated event emission tests: new encoding types in ChargesSettledFromContract event
+- ✅ Fixed BatchTimestampNotIncreasing errors: added `time.increase(1)` after all `registerScope` calls
+- ✅ Fixed timestamp validation tests: ensured batch timestamps > registration time AND within 60-second window
+- ✅ Fixed uint48 max test: updated to uint32 max (scaledAmount must fit in uint32)
+- ✅ Fixed BigInt mixing errors: convert flags to Number for bitwise operations
+- ✅ Fixed scope expiration boundary test: precise timing with `time.setNextBlockTimestamp()`
+- ✅ Section 5.10: Added 5 new tests for amount granularity
+- ✅ Section 5.11: Added 3 new tests for three-state pipeline (pending/finalizing/withdrawable)
+- ✅ Section 5.12: Added 2 new tests for timestamp offset storage
+- ✅ Section 5.13: Added 2 new tests for contract helper functions
+- ✅ All 70 tests passing
 
 ---
 
@@ -923,7 +966,7 @@ test/
 
 **Total Tests**: 300+
 
-**Completed**: 344 tests (+24 from Section 4 revocation updates)
+**Completed**: 414 tests (+70 from Section 5 settlement updates)
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -938,15 +981,19 @@ test/
 - **Section 4.3 - Reentrancy Protection (1 test)** ✅ UPDATED
 - **Section 4.4 - Edge Cases (3 tests)** ✅ UPDATED
 - **Section 4.5 - Amount Granularity Tests (5 tests - NEW SECTION)** ✅ NEW
-- Section 5.1 - Valid Settlement (10 tests)
-- Section 5.2 - Signature Verification (9 tests)
-- Section 5.3 - Timestamp Validation (9 tests)
-- Section 5.4 - Nonce Validation (7 tests)
-- Section 5.5 - Amount & Balance (6 tests)
-- Section 5.6 - Entry Expiration (4 tests)
-- Section 5.7 - Scope Status (4 tests)
-- Section 5.8 - Empty Batch Validation (3 tests)
-- Section 5.9 - Event Emissions (5 tests)
+- **Section 5.1 - Valid Settlement (10 tests)** ✅ UPDATED
+- **Section 5.2 - Signature Verification (9 tests)** ✅ UPDATED
+- **Section 5.3 - Timestamp Validation (9 tests)** ✅ UPDATED
+- **Section 5.4 - Nonce Validation (7 tests)** ✅ UPDATED
+- **Section 5.5 - Amount & Balance (6 tests)** ✅ UPDATED
+- **Section 5.6 - Entry Expiration (5 tests)** ✅ UPDATED
+- **Section 5.7 - Scope Status (4 tests)** ✅ UPDATED
+- **Section 5.8 - Empty Batch Validation (3 tests)** ✅ UPDATED
+- **Section 5.9 - Event Emissions (5 tests)** ✅ UPDATED
+- **Section 5.10 - Amount Granularity (5 tests - NEW SECTION)** ✅ NEW
+- **Section 5.11 - Three-State Pipeline (3 tests - NEW SECTION)** ✅ NEW
+- **Section 5.12 - Timestamp Offset Validation (2 tests - NEW SECTION)** ✅ NEW
+- **Section 5.13 - Contract Helper Functions (2 tests - NEW SECTION)** ✅ NEW
 - Section 6.1 - Valid Disputes (11 tests)
 - **Section 7.1 - balanceOf (12 tests - +3 NEW granularity tests)** ✅ UPDATED
 - **Section 7.2 - unlockedBalanceOf (11 tests - +3 NEW granularity tests)** ✅ UPDATED
@@ -967,6 +1014,31 @@ test/
 **Not Started**: Sections 20.7-20.10 (edge cases, integration, security for withdrawals), plus Sections 1, 9-19, 21
 
 ### Recent Updates
+
+**2025-01-09**: ✅ **Updated Section 5 - Charge Settlement Tests** (70 tests total, +13 new)
+- **File**: [test/ZeroLC/ZeroLC.settlement.test.ts](test/ZeroLC/ZeroLC.settlement.test.ts)
+- **Test Results**: All 70 tests passing
+- **Key Changes**:
+  - ✅ Updated `createAuthorizationScope()` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
+  - ✅ Updated `createChargeBatch()` helper: renamed `amount` → `scaledAmount`, changed encoding (uint48→uint32 for scaledAmount, uint24 for nonce, uint40 for notAfter)
+  - ✅ Added `calculateScaledAmount()` helper function for amount scaling calculations
+  - ✅ Added `getAuthorizationScopeData()` helper function to query unscaled scope metadata
+  - ✅ Updated all state assertions (~40 tests):
+    - Replaced `state.nonce` with `zeroLC.getScopeNonce(scopeHash)` calls
+    - Replaced `state.agentPendingAmount` with `zeroLC.getAgentPendingAmount(scope)` calls
+    - Updated `lastChargeTimestamp` assertions to validate offset values (notAfter - timestamp)
+    - Updated to use three-state amounts: `chargedAmountPending`, `chargedAmountFinalizing`, `chargedAmountWithdrawable`
+  - ✅ Updated event emission tests (Section 5.9): new encoding types in ChargesSettledFromContract event
+  - ✅ Fixed BatchTimestampNotIncreasing errors: added `await time.increase(1)` after all `registerScope` calls to ensure charge batch timestamps > registration time
+  - ✅ Fixed timestamp validation tests: ensured batch timestamps satisfy both 60-second window AND > registration time constraints
+  - ✅ Fixed uint48 max amount test: updated to uint32 max (scaledAmount must fit in uint32 after granularity scaling)
+  - ✅ Fixed BigInt mixing errors: convert flag constants to BigInt and use Number() for bitwise operations
+  - ✅ Fixed scope expiration boundary test: precise timing control using `time.setNextBlockTimestamp()`
+  - ✅ Section 5.10: Added 5 new tests for amount granularity (granularities 0, 3, 6, getAgentPendingAmount, max uint32)
+  - ✅ Section 5.11: Added 3 new tests for three-state pipeline (pending accumulation, multiple settlements, getAgentPendingAmount)
+  - ✅ Section 5.12: Added 2 new tests for timestamp offset validation (storage format, update behavior)
+  - ✅ Section 5.13: Added 2 new tests for contract helper functions (getScopeNonce, getScopeFlags)
+- **Coverage**: Complete coverage of charge settlement with granularity support, three-state withdrawal pipeline, and timestamp offset storage
 
 **2025-01-09**: ✅ **Updated Section 4 - Authorization Scope Revocation Tests** (24 tests total, +5 new)
 - **File**: [test/ZeroLC/ZeroLC.revocation.test.ts](test/ZeroLC/ZeroLC.revocation.test.ts)
