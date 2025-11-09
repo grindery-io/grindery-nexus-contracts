@@ -1,5 +1,5 @@
 import { task } from "hardhat/config";
-import { GrinderyPaymaster__factory } from "../typechain-types";
+import { type GrinderyPaymaster__factory } from "../typechain-types";
 import { getGasConfiguration } from "../lib/gas";
 
 task("paymasterDeposit", "Deposit fund for paymaster")

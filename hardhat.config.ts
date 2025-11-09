@@ -286,6 +286,27 @@ const config: HardhatUserConfig = {
         },
       },
     ],
+    overrides: {
+      "contracts/ZeroLC.sol": {
+        version: "0.8.30",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 20000,
+          },
+          viaIR: true,
+        },
+      },
+      "contracts/test/SettlementCaller.sol": {
+        version: "0.8.30",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1,
+          },
+        },
+      },
+    },
   },
   namedAccounts: {
     owner: {

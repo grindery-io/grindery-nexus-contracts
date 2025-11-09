@@ -10,7 +10,7 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - ✅ **Section 3 - Authorization Tests** - UPDATED (49/49 tests passing)
 - ✅ **Section 4 - Revocation Tests** - UPDATED (24/24 tests passing, +5 new granularity tests)
 - ✅ **Section 5 - Settlement Tests** - UPDATED (70/70 tests passing, +13 new tests for granularity & three-state)
-- ✅ **Section 6 - Dispute Tests** - UPDATED (50/50 tests passing, +10 new tests for cascading & granularity)
+- ✅ **Section 6 - Dispute Tests** - UPDATED (58/58 tests passing, +18 new tests for cascading, granularity & nonce validation)
 - ✅ **Section 7 - Balance View Functions** - UPDATED (23/23 tests passing, +6 new granularity tests)
 - ✅ **Section 8 - Compaction Tests** - UPDATED (36/36 tests passing, +13 new tests for granularity & three-state)
 - ⚠️ **Section 20 - Withdrawal Tests** - NEEDS COMPLETE REWRITE (obsolete methods)
@@ -352,7 +352,7 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 ---
 
-## 6. Dispute Tests ✅ COMPLETED (50 tests)
+## 6. Dispute Tests ✅ COMPLETED (58 tests)
 
 ### 6.1 Valid Disputes ✅ COMPLETED (11 tests)
 
@@ -434,6 +434,17 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - [x] Dispute with amountGranularity=12 (high precision)
 - [x] Cascading deduction with granularity=3 (verify scaled amounts work correctly)
 
+### 6.11 Nonce Validation ✅ COMPLETED (8 tests - NEW SECTION)
+
+- [x] Allow disputing settled charges (nonce < currentNonce)
+- [x] Revert when disputing unsettled charges (nonce == currentNonce)
+- [x] Revert when disputing future charges (nonce > currentNonce)
+- [x] Revert when disputing with nonce=0
+- [x] Revert when disputing with non-sequential nonces within batch
+- [x] Allow disputing old settled batches within dispute window
+- [x] Prevent leaked batch attack - dispute before settlement
+- [x] Allow disputing at exact settlement boundary
+
 **Updates Applied (2025-01-09)**:
 - ✅ Updated `createAuthorizationScope` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
 - ✅ Updated `createChargeBatch` helper: renamed `amount` → `scaledAmount`, changed encoding (uint48→uint32)
@@ -445,7 +456,8 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 - ✅ Fixed uint40 max test: changed to 100 years (avoid arithmetic overflow in _updateFinalizationState)
 - ✅ Section 6.9: Added 6 new tests for cascading deduction logic (finalizing→pending, protecting withdrawable)
 - ✅ Section 6.10: Added 4 new tests for amount granularity
-- ✅ All 50 tests passing
+- ✅ Section 6.11: Added 8 new tests for nonce validation (preventing disputes of unsettled charges)
+- ✅ All 58 tests passing
 
 ---
 
@@ -994,7 +1006,7 @@ test/
 
 **Total Tests**: 300+
 
-**Completed**: 464 tests (+50 from Section 6 dispute updates)
+**Completed**: 472 tests (+58 from Section 6 dispute updates)
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -1032,6 +1044,7 @@ test/
 - **Section 6.8 - Empty Batch Validation (2 tests)** ✅ UPDATED
 - **Section 6.9 - Cascading Deduction Logic (6 tests - NEW SECTION)** ✅ NEW
 - **Section 6.10 - Amount Granularity Tests (4 tests - NEW SECTION)** ✅ NEW
+- **Section 6.11 - Nonce Validation (8 tests - NEW SECTION)** ✅ NEW
 - **Section 7.1 - balanceOf (12 tests - +3 NEW granularity tests)** ✅ UPDATED
 - **Section 7.2 - unlockedBalanceOf (11 tests - +3 NEW granularity tests)** ✅ UPDATED
 - **Section 8.1 - Compaction Logic (12 tests)** ✅ UPDATED
@@ -1052,9 +1065,9 @@ test/
 
 ### Recent Updates
 
-**2025-01-09**: ✅ **Updated Section 6 - Dispute Tests** (50 tests total, +10 new)
+**2025-01-09**: ✅ **Updated Section 6 - Dispute Tests** (58 tests total, +18 new)
 - **File**: [test/ZeroLC/ZeroLC.dispute.test.ts](test/ZeroLC/ZeroLC.dispute.test.ts)
-- **Test Results**: All 50 tests passing
+- **Test Results**: All 58 tests passing
 - **Key Changes**:
   - ✅ Updated `createAuthorizationScope()` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
   - ✅ Updated `createChargeBatch()` helper: renamed `amount` → `scaledAmount`, changed encoding (uint48→uint32)
@@ -1074,7 +1087,17 @@ test/
     - Revert when clawback > batch total
     - Multiple disputes with cascading logic
   - ✅ Section 6.10: Added 4 new tests for amount granularity (3, 6, 12, cascading with granularity)
-- **Coverage**: Complete coverage of dispute functionality with cascading deduction logic and granularity support
+  - ✅ Section 6.11: Added 8 new tests for nonce validation (SECURITY FIX)
+    - Allow disputing settled charges (nonce < currentNonce)
+    - Prevent disputing unsettled charges (nonce == currentNonce) - **Critical security fix**
+    - Prevent disputing future charges (nonce > currentNonce)
+    - Validate nonces start at 1 (nonce > 0)
+    - Validate sequential nonces within batch
+    - Allow old batches within dispute window (intentional design)
+    - Prevent leaked batch attack (signed batch disputed before settlement)
+    - Allow disputing at exact settlement boundary
+- **Coverage**: Complete coverage of dispute functionality with cascading deduction logic, granularity support, and nonce validation
+- **Security Fix**: Added nonce validation to `dispute()` function to prevent disputing unsettled charges. Attack scenario: if signed charge batches leak before settlement, malicious users could dispute them immediately, receiving refunds for services never paid for, breaking the accounting system.
 - **Key Insight**: Cascading deduction validates clawback ≤ batch total FIRST (lines 645-653 in ZeroLC.sol), THEN deducts from finalizing→pending buckets (lines 666-690). Tests properly verify this two-phase validation.
 
 **2025-01-09**: ✅ **Updated Section 5 - Charge Settlement Tests** (70 tests total, +13 new)

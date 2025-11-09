@@ -2014,4 +2014,217 @@ describe("ZeroLC - Dispute Tests", function () {
       expect(stateAfter.chargedAmountPending).to.equal(calculateScaledAmount(30000n, 3)); // 70000 - 40000
     });
   });
+
+  describe("Section 6.11 - Nonce Validation", function () {
+    it("should allow disputing settled charges (nonce < currentNonce)", async function () {
+      const { zeroLC, user, agent, depositForUser, registerScope, settleCharges, createDispute, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, DEPOSIT_AMOUNT);
+      const scope = await registerScope(user, agent, SCOPE_AMOUNT, DISPUTE_WINDOW);
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Settle charges with nonce=1
+      const timestamp = await time.latest();
+      const { chargeBatch } = await settleCharges(scope, agent, [
+        { scaledAmount: calculateScaledAmount(5000n, 0), nonce: 1, notAfter: timestamp + 3600 }
+      ]);
+
+      // Current nonce should now be 2
+      const currentNonce = await zeroLC.getScopeNonce(scopeHash);
+      expect(currentNonce).to.equal(2);
+
+      // Dispute settled charges (nonce=1 < currentNonce=2) - should succeed
+      const dispute = await createDispute(chargeBatch, scopeHash, calculateScaledAmount(5000n, 0), user);
+      await expect(zeroLC.dispute([dispute])).to.not.be.reverted;
+    });
+
+    it("should revert when disputing unsettled charges (nonce == currentNonce)", async function () {
+      const { zeroLC, user, agent, depositForUser, registerScope, createChargeBatch, createDispute, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, DEPOSIT_AMOUNT);
+      const scope = await registerScope(user, agent, SCOPE_AMOUNT, DISPUTE_WINDOW);
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Current nonce is 1 (no settlements yet)
+      const currentNonce = await zeroLC.getScopeNonce(scopeHash);
+      expect(currentNonce).to.equal(1);
+
+      // Create a signed charge batch with nonce=1 (not settled yet)
+      const timestamp = await time.latest();
+      const { chargeBatch } = await createChargeBatch(scope, agent, [
+        { scaledAmount: calculateScaledAmount(5000n, 0), nonce: 1, notAfter: timestamp + 3600 }
+      ], timestamp + 1);
+
+      // Try to dispute unsettled charges (nonce=1 == currentNonce=1) - should revert
+      const dispute = await createDispute(chargeBatch, scopeHash, calculateScaledAmount(5000n, 0), user);
+      await expect(zeroLC.dispute([dispute]))
+        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
+    });
+
+    it("should revert when disputing future charges (nonce > currentNonce)", async function () {
+      const { zeroLC, user, agent, depositForUser, registerScope, settleCharges, createChargeBatch, createDispute, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, DEPOSIT_AMOUNT);
+      const scope = await registerScope(user, agent, SCOPE_AMOUNT, DISPUTE_WINDOW);
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Settle charges with nonce=1
+      const timestamp1 = await time.latest();
+      await settleCharges(scope, agent, [
+        { scaledAmount: calculateScaledAmount(1000n, 0), nonce: 1, notAfter: timestamp1 + 3600 }
+      ]);
+
+      // Current nonce should now be 2
+      const currentNonce = await zeroLC.getScopeNonce(scopeHash);
+      expect(currentNonce).to.equal(2);
+
+      // Create a signed charge batch with nonce=5 (future, not settled)
+      await time.increase(1);
+      const timestamp2 = await time.latest();
+      const { chargeBatch } = await createChargeBatch(scope, agent, [
+        { scaledAmount: calculateScaledAmount(5000n, 0), nonce: 5, notAfter: timestamp2 + 3600 }
+      ], timestamp2 + 1);
+
+      // Try to dispute future charges (nonce=5 > currentNonce=2) - should revert
+      const dispute = await createDispute(chargeBatch, scopeHash, calculateScaledAmount(5000n, 0), user);
+      await expect(zeroLC.dispute([dispute]))
+        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
+    });
+
+    it("should revert when disputing with nonce=0", async function () {
+      const { zeroLC, user, agent, depositForUser, registerScope, createChargeBatch, createDispute, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, DEPOSIT_AMOUNT);
+      const scope = await registerScope(user, agent, SCOPE_AMOUNT, DISPUTE_WINDOW);
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Create a charge batch with nonce=0 (invalid)
+      const timestamp = await time.latest();
+      const { chargeBatch } = await createChargeBatch(scope, agent, [
+        { scaledAmount: calculateScaledAmount(5000n, 0), nonce: 0, notAfter: timestamp + 3600 }
+      ], timestamp + 1);
+
+      // Try to dispute with nonce=0 - should revert
+      const dispute = await createDispute(chargeBatch, scopeHash, calculateScaledAmount(5000n, 0), user);
+      await expect(zeroLC.dispute([dispute]))
+        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
+    });
+
+    it("should revert when disputing with non-sequential nonces", async function () {
+      const { zeroLC, user, agent, depositForUser, registerScope, settleCharges, createChargeBatch, createDispute, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, DEPOSIT_AMOUNT);
+      const scope = await registerScope(user, agent, SCOPE_AMOUNT, DISPUTE_WINDOW);
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Settle charges with nonces 1, 2, 3
+      const timestamp1 = await time.latest();
+      await settleCharges(scope, agent, [
+        { scaledAmount: calculateScaledAmount(1000n, 0), nonce: 1, notAfter: timestamp1 + 3600 },
+        { scaledAmount: calculateScaledAmount(1000n, 0), nonce: 2, notAfter: timestamp1 + 3600 },
+        { scaledAmount: calculateScaledAmount(1000n, 0), nonce: 3, notAfter: timestamp1 + 3600 }
+      ]);
+
+      // Current nonce should now be 4
+      const currentNonce = await zeroLC.getScopeNonce(scopeHash);
+      expect(currentNonce).to.equal(4);
+
+      // Create a charge batch with non-sequential nonces [1, 3] (skipping 2)
+      await time.increase(1);
+      const timestamp2 = await time.latest();
+      const { chargeBatch } = await createChargeBatch(scope, agent, [
+        { scaledAmount: calculateScaledAmount(1000n, 0), nonce: 1, notAfter: timestamp2 + 3600 },
+        { scaledAmount: calculateScaledAmount(1000n, 0), nonce: 3, notAfter: timestamp2 + 3600 }
+      ], timestamp2 + 1);
+
+      // Try to dispute with non-sequential nonces - should revert
+      const dispute = await createDispute(chargeBatch, scopeHash, calculateScaledAmount(2000n, 0), user);
+      await expect(zeroLC.dispute([dispute]))
+        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
+    });
+
+    it("should allow disputing old settled batches within dispute window", async function () {
+      const { zeroLC, user, agent, depositForUser, registerScope, settleCharges, createDispute, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, DEPOSIT_AMOUNT);
+      const scope = await registerScope(user, agent, SCOPE_AMOUNT, DISPUTE_WINDOW);
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Settle first batch with nonce=1
+      const timestamp1 = await time.latest();
+      const { chargeBatch: batch1 } = await settleCharges(scope, agent, [
+        { scaledAmount: calculateScaledAmount(2000n, 0), nonce: 1, notAfter: timestamp1 + 3600 }
+      ]);
+
+      // Settle second batch with nonce=2
+      await time.increase(2);
+      const timestamp2 = await time.latest();
+      await settleCharges(scope, agent, [
+        { scaledAmount: calculateScaledAmount(3000n, 0), nonce: 2, notAfter: timestamp2 + 3600 }
+      ]);
+
+      // Current nonce should now be 3
+      const currentNonce = await zeroLC.getScopeNonce(scopeHash);
+      expect(currentNonce).to.equal(3);
+
+      // Dispute the OLD batch1 (nonce=1) - should succeed as it's settled and within window
+      const dispute = await createDispute(batch1, scopeHash, calculateScaledAmount(2000n, 0), user);
+      await expect(zeroLC.dispute([dispute])).to.not.be.reverted;
+    });
+
+    it("should prevent leaked batch attack - dispute before settlement", async function () {
+      const { zeroLC, user, agent, depositForUser, registerScope, createChargeBatch, createDispute, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, DEPOSIT_AMOUNT);
+      const scope = await registerScope(user, agent, SCOPE_AMOUNT, DISPUTE_WINDOW);
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Scenario: Agent creates and signs a charge batch for nonce=1
+      // but hasn't settled it yet. The signed batch is leaked to the user.
+      const timestamp = await time.latest();
+      const { chargeBatch } = await createChargeBatch(scope, agent, [
+        { scaledAmount: calculateScaledAmount(5000n, 0), nonce: 1, notAfter: timestamp + 3600 }
+      ], timestamp + 1);
+
+      // User tries to immediately dispute the leaked batch before agent settles
+      const currentNonce = await zeroLC.getScopeNonce(scopeHash);
+      expect(currentNonce).to.equal(1); // No settlements yet
+
+      const dispute = await createDispute(chargeBatch, scopeHash, calculateScaledAmount(5000n, 0), user);
+
+      // Attack should fail: can't dispute unsettled charges (nonce=1 == currentNonce=1)
+      await expect(zeroLC.dispute([dispute]))
+        .to.be.revertedWithCustomError(zeroLC, "InvalidNonce");
+    });
+
+    it("should allow disputing at exact settlement boundary", async function () {
+      const { zeroLC, user, agent, depositForUser, registerScope, settleCharges, createDispute, calculateScaledAmount } =
+        await loadFixture(deployZeroLCFixture);
+
+      await depositForUser(user, DEPOSIT_AMOUNT);
+      const scope = await registerScope(user, agent, SCOPE_AMOUNT, DISPUTE_WINDOW);
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Settle charges with nonce=1
+      const timestamp = await time.latest();
+      const { chargeBatch } = await settleCharges(scope, agent, [
+        { scaledAmount: calculateScaledAmount(5000n, 0), nonce: 1, notAfter: timestamp + 3600 }
+      ]);
+
+      // Current nonce is now 2 (immediately after settlement)
+      const currentNonce = await zeroLC.getScopeNonce(scopeHash);
+      expect(currentNonce).to.equal(2);
+
+      // Immediately dispute the just-settled charges - should succeed
+      const dispute = await createDispute(chargeBatch, scopeHash, calculateScaledAmount(5000n, 0), user);
+      await expect(zeroLC.dispute([dispute])).to.not.be.reverted;
+    });
+  });
 });

@@ -577,7 +577,6 @@ contract ZeroLC is
                 totalScaledAmount += entry.scaledAmount;
                 nonce += 1;
             }
-            // TODO: Check dispute window and move amounts as needed
             uint32 remainingAmount = state.remainingAmount;
             require(
                 totalScaledAmount <= remainingAmount,
@@ -642,15 +641,6 @@ contract ZeroLC is
                 ),
                 InvalidDisputeSignature()
             );
-            uint32 totalChargedAmount = 0;
-            for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
-                ChargeEntry memory entry = chargeBatch.entries[j];
-                totalChargedAmount += entry.scaledAmount;
-            }
-            require(
-                totalChargedAmount >= d.amountToClawback,
-                ClawbackExceedsBatchTotal()
-            );
             bytes32 disputeHash = keccak256(
                 abi.encode(
                     chargeBatch.scope,
@@ -662,6 +652,31 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
+
+            // Validate nonces and calculate total amount in a single loop
+            uint24 currentNonce = _getNonce(state.nonceAndFlags);
+            uint32 totalChargedAmount = 0;
+            uint24 expectedNonce = 0;
+            for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
+                ChargeEntry memory entry = chargeBatch.entries[j];
+
+                // Validate nonce: must be < current (already settled)
+                require(entry.nonce < currentNonce, InvalidNonce());
+
+                // Validate sequential nonces within batch
+                if (j == 0) {
+                    require(entry.nonce > 0, InvalidNonce());
+                    expectedNonce = entry.nonce;
+                } else {
+                    require(entry.nonce == ++expectedNonce, InvalidNonce());
+                }
+
+                totalChargedAmount += entry.scaledAmount;
+            }
+            require(
+                totalChargedAmount >= d.amountToClawback,
+                ClawbackExceedsBatchTotal()
+            );
 
             // Cascading deduction: chargedAmountWithdrawable cannot be clawed back (finalized)
             // Deduct from chargedAmountFinalizing first, then chargedAmountPending
