@@ -61,16 +61,18 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       totalAmount: bigint,
       disputeWindow: number = 3600,
       notBefore?: number,
-      notAfter?: number
+      notAfter?: number,
+      amountGranularity: number = 0
     ) {
       const currentTime = await time.latest();
       const scope = {
         user: userSigner.address,
-        totalAmount: totalAmount,
         disputeWindow: disputeWindow,
         agent: agentSigner.address,
         notBefore: notBefore ?? currentTime,
         notAfter: notAfter ?? currentTime + 86400, // 1 day from now
+        totalAmount: totalAmount,
+        amountGranularity: amountGranularity,
       };
 
       const domain = {
@@ -83,11 +85,12 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       const types = {
         AuthorizationScope: [
           { name: "user", type: "address" },
-          { name: "totalAmount", type: "uint48" },
-          { name: "disputeWindow", type: "uint48" },
+          { name: "disputeWindow", type: "uint40" },
           { name: "agent", type: "address" },
-          { name: "notBefore", type: "uint48" },
-          { name: "notAfter", type: "uint48" },
+          { name: "notBefore", type: "uint40" },
+          { name: "notAfter", type: "uint40" },
+          { name: "totalAmount", type: "uint128" },
+          { name: "amountGranularity", type: "uint8" },
         ],
       };
 
@@ -115,6 +118,16 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       return await userSigner.signTypedData(domain, types, { scopeHash });
     }
 
+    // Helper function to get authorization scope data from the mapping
+    async function getAuthorizationScopeData(scopeHash: string) {
+      return await zeroLC.authorizationScopeData(scopeHash);
+    }
+
+    // Helper function to calculate scaled amount (what gets stored in state)
+    function calculateScaledAmount(amount: bigint, granularity: number): bigint {
+      return amount / (10n ** BigInt(granularity));
+    }
+
     return {
       zeroLC,
       gasToken,
@@ -127,6 +140,8 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       depositForUser,
       createAuthorizationScope,
       signRevokeAuthorizationScope,
+      getAuthorizationScopeData,
+      calculateScaledAmount,
     };
   }
 
@@ -243,7 +258,7 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
     });
 
     it("should maintain remainingAmount correctly after revocation", async function () {
-      const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope } =
+      const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope, calculateScaledAmount } =
         await loadFixture(deployZeroLCFixture);
 
       await depositForUser(user, MICRO_AMOUNT);
@@ -253,13 +268,14 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
 
       const scopeHash = await zeroLC.getScopeHash(scope);
       const stateBefore = await zeroLC.authorizationScopes(scopeHash);
-      expect(stateBefore.remainingAmount).to.equal(MICRO_AMOUNT);
+      const expectedScaledAmount = calculateScaledAmount(MICRO_AMOUNT, 0);
+      expect(stateBefore.remainingAmount).to.equal(expectedScaledAmount);
 
       const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
       await zeroLC.revokeAuthorizationScope(scope, revSignature);
 
       const stateAfter = await zeroLC.authorizationScopes(scopeHash);
-      expect(stateAfter.remainingAmount).to.equal(MICRO_AMOUNT); // Should remain unchanged
+      expect(stateAfter.remainingAmount).to.equal(expectedScaledAmount); // Should remain unchanged
     });
 
     it("should maintain agentPendingAmount correctly after revocation", async function () {
@@ -271,15 +287,15 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       const { scope, signature } = await createAuthorizationScope(user, agent, MICRO_AMOUNT);
       await zeroLC.registerAuthorizationScope(scope, signature);
 
-      const scopeHash = await zeroLC.getScopeHash(scope);
-      const stateBefore = await zeroLC.authorizationScopes(scopeHash);
-      expect(stateBefore.agentPendingAmount).to.equal(0);
+      const pendingBefore = await zeroLC.getAgentPendingAmount(scope);
+      expect(pendingBefore).to.equal(0);
 
+      const scopeHash = await zeroLC.getScopeHash(scope);
       const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
       await zeroLC.revokeAuthorizationScope(scope, revSignature);
 
-      const stateAfter = await zeroLC.authorizationScopes(scopeHash);
-      expect(stateAfter.agentPendingAmount).to.equal(0); // Should remain unchanged
+      const pendingAfter = await zeroLC.getAgentPendingAmount(scope);
+      expect(pendingAfter).to.equal(0); // Should remain unchanged
     });
 
     it("should revoke scope with valid ERC-1271 signature", async function () {
@@ -303,11 +319,12 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       const currentTime = await time.latest();
       const scope = {
         user: mockWalletAddress,
-        totalAmount: MICRO_AMOUNT,
         disputeWindow: 3600,
         agent: agent.address,
         notBefore: currentTime,
         notAfter: currentTime + 3600,
+        totalAmount: MICRO_AMOUNT,
+        amountGranularity: 0,
       };
 
       // Register scope with ERC-1271 wallet - user signs on behalf of the wallet
@@ -321,11 +338,12 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
         {
           AuthorizationScope: [
             { name: "user", type: "address" },
-            { name: "totalAmount", type: "uint48" },
-            { name: "disputeWindow", type: "uint48" },
+            { name: "disputeWindow", type: "uint40" },
             { name: "agent", type: "address" },
-            { name: "notBefore", type: "uint48" },
-            { name: "notAfter", type: "uint48" },
+            { name: "notBefore", type: "uint40" },
+            { name: "notAfter", type: "uint40" },
+            { name: "totalAmount", type: "uint128" },
+            { name: "amountGranularity", type: "uint8" },
           ],
         },
         scope
@@ -463,11 +481,12 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       const currentTime = await time.latest();
       const scope = {
         user: user.address,
-        totalAmount: MICRO_AMOUNT,
         disputeWindow: 3600,
         agent: agent.address,
         notBefore: currentTime,
         notAfter: currentTime + 3600,
+        totalAmount: MICRO_AMOUNT,
+        amountGranularity: 0,
       };
 
       // Don't register the scope
@@ -598,6 +617,156 @@ describe("ZeroLC - Authorization Scope Revocation Tests (Section 4)", function (
       const stateAfter = await zeroLC.authorizationScopes(scopeHash);
       expect(stateAfter.notAfter).to.be.closeTo(currentTime + 300, 5);
       expect(stateAfter.notAfter).to.be.lessThan(stateBefore.notAfter);
+    });
+  });
+
+  describe("Amount Granularity Tests", function () {
+    it("should revoke scope with amountGranularity = 3", async function () {
+      const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope, calculateScaledAmount, getAuthorizationScopeData } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 1000000n; // 1,000,000
+      const granularity = 3;
+      await depositForUser(user, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(user, agent, totalAmount, 3600, undefined, undefined, granularity);
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Verify scaled amount stored correctly
+      const stateBefore = await zeroLC.authorizationScopes(scopeHash);
+      const expectedScaledAmount = calculateScaledAmount(totalAmount, granularity);
+      expect(stateBefore.remainingAmount).to.equal(expectedScaledAmount);
+
+      // Verify authorizationScopeData preserves unscaled totalAmount
+      const scopeData = await getAuthorizationScopeData(scopeHash);
+      expect(scopeData.totalAmount).to.equal(totalAmount);
+      expect(scopeData.amountGranularity).to.equal(granularity);
+
+      const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
+      await expect(zeroLC.revokeAuthorizationScope(scope, revSignature))
+        .to.emit(zeroLC, "AuthorizationScopeRevoking")
+        .withArgs(user.address, agent.address, scopeHash);
+
+      // Verify remainingAmount unchanged after revocation
+      const stateAfter = await zeroLC.authorizationScopes(scopeHash);
+      expect(stateAfter.remainingAmount).to.equal(expectedScaledAmount);
+    });
+
+    it("should revoke scope with amountGranularity = 6 (USDC-like)", async function () {
+      const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope, calculateScaledAmount, getAuthorizationScopeData } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 1000000000n; // 1 billion (1,000 USDC)
+      const granularity = 6;
+      await depositForUser(user, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(user, agent, totalAmount, 3600, undefined, undefined, granularity);
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Verify scaled amount stored correctly
+      const stateBefore = await zeroLC.authorizationScopes(scopeHash);
+      const expectedScaledAmount = calculateScaledAmount(totalAmount, granularity);
+      expect(stateBefore.remainingAmount).to.equal(expectedScaledAmount);
+
+      // Verify authorizationScopeData preserves unscaled totalAmount
+      const scopeData = await getAuthorizationScopeData(scopeHash);
+      expect(scopeData.totalAmount).to.equal(totalAmount);
+      expect(scopeData.amountGranularity).to.equal(granularity);
+      expect(scopeData.disputeWindow).to.equal(3600);
+
+      const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
+      await expect(zeroLC.revokeAuthorizationScope(scope, revSignature))
+        .to.emit(zeroLC, "AuthorizationScopeRevoking")
+        .withArgs(user.address, agent.address, scopeHash);
+
+      // Verify remainingAmount unchanged after revocation
+      const stateAfter = await zeroLC.authorizationScopes(scopeHash);
+      expect(stateAfter.remainingAmount).to.equal(expectedScaledAmount);
+    });
+
+    it("should revoke scope with amountGranularity = 12", async function () {
+      const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope, calculateScaledAmount, getAuthorizationScopeData } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 1000000000000n; // 1 trillion
+      const granularity = 12;
+      await depositForUser(user, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(user, agent, totalAmount, 3600, undefined, undefined, granularity);
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Verify scaled amount stored correctly
+      const stateBefore = await zeroLC.authorizationScopes(scopeHash);
+      const expectedScaledAmount = calculateScaledAmount(totalAmount, granularity);
+      expect(stateBefore.remainingAmount).to.equal(expectedScaledAmount);
+
+      // Verify authorizationScopeData preserves unscaled totalAmount
+      const scopeData = await getAuthorizationScopeData(scopeHash);
+      expect(scopeData.totalAmount).to.equal(totalAmount);
+      expect(scopeData.amountGranularity).to.equal(granularity);
+
+      const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
+      await expect(zeroLC.revokeAuthorizationScope(scope, revSignature))
+        .to.emit(zeroLC, "AuthorizationScopeRevoking")
+        .withArgs(user.address, agent.address, scopeHash);
+
+      // Verify remainingAmount unchanged after revocation
+      const stateAfter = await zeroLC.authorizationScopes(scopeHash);
+      expect(stateAfter.remainingAmount).to.equal(expectedScaledAmount);
+    });
+
+    it("should verify agentPendingAmount returns 0 with different granularities", async function () {
+      const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 1000000n;
+      const granularity = 3;
+      await depositForUser(user, totalAmount);
+
+      const { scope, signature } = await createAuthorizationScope(user, agent, totalAmount, 3600, undefined, undefined, granularity);
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      // Before revocation
+      const pendingBefore = await zeroLC.getAgentPendingAmount(scope);
+      expect(pendingBefore).to.equal(0);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
+      await zeroLC.revokeAuthorizationScope(scope, revSignature);
+
+      // After revocation
+      const pendingAfter = await zeroLC.getAgentPendingAmount(scope);
+      expect(pendingAfter).to.equal(0);
+    });
+
+    it("should verify balance calculations work correctly with granularity after revocation", async function () {
+      const { zeroLC, user, agent, depositForUser, createAuthorizationScope, signRevokeAuthorizationScope } =
+        await loadFixture(deployZeroLCFixture);
+
+      const totalAmount = 1000000n;
+      const granularity = 6;
+      await depositForUser(user, totalAmount);
+
+      const balanceBefore = await zeroLC.balanceOf(user.address);
+
+      const { scope, signature } = await createAuthorizationScope(user, agent, totalAmount, 3600, undefined, undefined, granularity);
+      await zeroLC.registerAuthorizationScope(scope, signature);
+
+      const balanceAfterRegistration = await zeroLC.balanceOf(user.address);
+      expect(balanceAfterRegistration).to.equal(balanceBefore); // Balance stays the same (locked in scope)
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const revSignature = await signRevokeAuthorizationScope(user, scopeHash);
+      await zeroLC.revokeAuthorizationScope(scope, revSignature);
+
+      const balanceAfterRevocation = await zeroLC.balanceOf(user.address);
+      expect(balanceAfterRevocation).to.equal(balanceAfterRegistration); // Balance unchanged by revocation
     });
   });
 });

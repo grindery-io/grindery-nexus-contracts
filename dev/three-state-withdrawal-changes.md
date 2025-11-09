@@ -1125,9 +1125,9 @@ return {
 | `settlement.test.ts` | ⬜ TODO | ✅ No change | ⬜ ADD | ⬜ ADD | ⬜ TODO | ⬜ TODO |
 | `withdrawal.test.ts` | ⬜ TODO | ✅ No change | ⬜ ADD | ⬜ ADD | ⬜ TODO | ⬜ TODO |
 | `dispute.test.ts` | ⬜ TODO | ✅ No change | ⬜ ADD | ⬜ ADD | ⬜ TODO | ⬜ TODO |
-| `compact.test.ts` | ⬜ TODO | ✅ No change | ⬜ ADD | ⬜ ADD | N/A | N/A |
-| `revocation.test.ts` | ⬜ TODO | ✅ No change | N/A | ⬜ ADD | N/A | N/A |
-| `balances.test.ts` | N/A | ✅ No change | N/A | N/A | N/A | N/A |
+| `compact.test.ts` | ✅ DONE | ✅ No change | ✅ DONE | ✅ DONE | N/A | N/A |
+| `revocation.test.ts` | ✅ DONE | ✅ No change | ✅ DONE | ✅ DONE | N/A | N/A |
+| `balances.test.ts` | ✅ DONE | ✅ No change | ✅ DONE | ✅ DONE | N/A | N/A |
 
 **Legend:**
 - ✅ = Completed

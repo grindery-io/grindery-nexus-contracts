@@ -8,6 +8,7 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 **Migration Status**:
 - ✅ **Section 3 - Authorization Tests** - UPDATED (49/49 tests passing)
+- ✅ **Section 4 - Revocation Tests** - UPDATED (24/24 tests passing, +5 new granularity tests)
 - ✅ **Section 7 - Balance View Functions** - UPDATED (23/23 tests passing, +6 new granularity tests)
 - ✅ **Section 8 - Compaction Tests** - UPDATED (36/36 tests passing, +13 new tests for granularity & three-state)
 - ⚠️ **Section 5 - Settlement Tests** - NEEDS UPDATE (ChargeEntry field rename, scaling)
@@ -173,27 +174,50 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 ---
 
-## 4. Authorization Scope Revocation Tests
+## 4. Authorization Scope Revocation Tests ✅ COMPLETED (24 tests)
 
+### 4.1 Valid Revocation (8 tests)
 - [x] Revoke scope with valid signature
 - [x] Revoke scope sets notAfter to block.timestamp + 300
+- [x] Revoke scope at exact boundary (notAfter == newNotAfter + few seconds)
+- [x] Revoke scope emits AuthorizationScopeRevoking event
+- [x] Revoke scope maintains remainingAmount correctly (with scaled amount assertion)
+- [x] Revoke scope maintains agentPendingAmount correctly (using getAgentPendingAmount())
+- [x] Revoke scope with valid ERC-1271 signature
+- [x] Revoke scope after partial charges
+
+### 4.2 Revocation Failures (7 tests)
 - [x] Revoke scope with invalid signature (should revert)
 - [x] Revoke already expired scope (should revert)
 - [ ] Revoke scope with remainingAmount == 0 (should revert) - pending settlement tests
 - [x] Revoke scope with newNotAfter >= current notAfter (should revert)
-- [x] Revoke scope at exact boundary (notAfter == newNotAfter + few seconds)
-- [x] Revoke scope emits AuthorizationScopeRevoking event
 - [x] Revoke scope twice (second should fail)
-- [x] Revoke scope after partial charges
-- [x] Revoke scope with valid ERC-1271 signature
-- [x] Revoke scope maintains remainingAmount correctly
-- [x] Revoke scope maintains agentPendingAmount correctly
-- [x] Reentrancy attack on revocation (should be blocked)
 - [x] Revoke with malformed signature (should revert)
 - [x] Revoke non-existent scope (should revert)
+
+### 4.3 Reentrancy Protection (1 test)
+- [x] Reentrancy attack on revocation (should be blocked)
+
+### 4.4 Edge Cases (3 tests)
 - [x] Revoke with very long initial duration
 - [x] Revocation doesn't affect user balance
 - [x] Revocation shortens time window for settlements
+
+### 4.5 Amount Granularity Tests (5 tests - NEW)
+- [x] Revoke scope with amountGranularity = 3
+- [x] Revoke scope with amountGranularity = 6 (USDC-like)
+- [x] Revoke scope with amountGranularity = 12
+- [x] Verify agentPendingAmount returns 0 with different granularities
+- [x] Verify balance calculations work correctly with granularity after revocation
+
+**Updates Applied (2025-01-09)**:
+- ✅ Updated `createAuthorizationScope` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
+- ✅ Added new helper functions: `getAuthorizationScopeData()`, `calculateScaledAmount()`
+- ✅ Updated state assertions to use scaled amounts and `getAgentPendingAmount()` contract call
+- ✅ Updated ERC-1271 test inline scope and types to match new struct
+- ✅ Updated inline scope in "Revocation Failures" section
+- ✅ Added Section 4.5: 5 new tests for amount granularity
+- ✅ All 24 tests passing (23 passing + 1 pending)
 
 ---
 
@@ -899,7 +923,7 @@ test/
 
 **Total Tests**: 300+
 
-**Completed**: 320 tests
+**Completed**: 344 tests (+24 from Section 4 revocation updates)
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -909,7 +933,11 @@ test/
 - Section 3.4 - Auto-Deposit Logic (4 tests)
 - Section 3.5 - Scope Hash Calculation (4 tests)
 - Section 3.6 - Amount Granularity (5 tests - **NEW SECTION**)
-- Section 4 - Authorization Scope Revocation (18 tests)
+- **Section 4.1 - Valid Revocation (8 tests)** ✅ UPDATED
+- **Section 4.2 - Revocation Failures (7 tests)** ✅ UPDATED
+- **Section 4.3 - Reentrancy Protection (1 test)** ✅ UPDATED
+- **Section 4.4 - Edge Cases (3 tests)** ✅ UPDATED
+- **Section 4.5 - Amount Granularity Tests (5 tests - NEW SECTION)** ✅ NEW
 - Section 5.1 - Valid Settlement (10 tests)
 - Section 5.2 - Signature Verification (9 tests)
 - Section 5.3 - Timestamp Validation (9 tests)
@@ -939,6 +967,21 @@ test/
 **Not Started**: Sections 20.7-20.10 (edge cases, integration, security for withdrawals), plus Sections 1, 9-19, 21
 
 ### Recent Updates
+
+**2025-01-09**: ✅ **Updated Section 4 - Authorization Scope Revocation Tests** (24 tests total, +5 new)
+- **File**: [test/ZeroLC/ZeroLC.revocation.test.ts](test/ZeroLC/ZeroLC.revocation.test.ts)
+- **Test Results**: All 24 tests passing (23 passing + 1 pending)
+- **Key Changes**:
+  - ✅ Updated `createAuthorizationScope()` helper: added `amountGranularity` parameter, reordered fields, updated EIP-712 types
+  - ✅ Added new helper functions: `getAuthorizationScopeData()`, `calculateScaledAmount()`
+  - ✅ Updated state assertions: replaced `state.remainingAmount` with `calculateScaledAmount(MICRO_AMOUNT, 0)`
+  - ✅ Updated agentPendingAmount assertions: replaced `state.agentPendingAmount` with `zeroLC.getAgentPendingAmount(scope)` calls
+  - ✅ Updated ERC-1271 test inline scope and EIP-712 types to match new struct
+  - ✅ Updated inline scope in "Revocation Failures" section for non-existent scope test
+  - ✅ Section 4.5: Added 5 new tests for amount granularity (3, 6, 12, agentPendingAmount with granularity, balance calculations)
+  - ✅ Verified all tests work with scaled amounts in storage
+  - ✅ Verified authorizationScopeData mapping preserves unscaled totalAmount
+- **Coverage**: Complete coverage of revocation with granularity support and three-state withdrawal compatibility
 
 **2025-01-08**: ✅ **Updated Section 8 - Compact User Authorization States** (36 tests total, +13 new)
 - **File**: [test/ZeroLC/ZeroLC.compact.test.ts](test/ZeroLC/ZeroLC.compact.test.ts)
