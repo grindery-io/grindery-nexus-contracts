@@ -773,190 +773,280 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 ---
 
-## 20. Agent Withdrawal Tests ⚠️ NEEDS UPDATE FOR THREE-STATE SYSTEM (81 tests total)
+## 20. Agent Withdrawal Tests ⚠️ COMPLETE REWRITE NEEDED (92 tests total)
 
-**Status**: Tests implemented for OLD two-state withdrawal system. **REQUIRES UPDATE** for new three-state pipeline.
+**Status**: Section 20 requires complete rewrite for three-state withdrawal system.
 
 **Breaking Changes in Three-State System**:
-- ❌ **`recentCharges` parameter REMOVED** from `withdrawFromAuthorizationScope()`
+- ❌ **`recentCharges` parameter REMOVED** from `withdrawAgentChargedFund()`
 - ❌ **`withdrawalNonce` field REMOVED** from `AuthorizationScopeState`
 - ❌ **`getAgentWithdrawalNonce()` function REMOVED**
 - ❌ **`getWithdrawableAmountSimple()` function REMOVED**
 - ❌ **`getWithdrawableAmountDetailed()` function REMOVED**
-- ✅ **NEW**: Amounts automatically progress: `pending` → `finalizing` → `withdrawable`
-- ✅ **NEW**: Time-based withdrawal (no charge batch submission needed)
+- ✅ **NEW**: Three-state pipeline: `pending` → `finalizing` → `withdrawable`
+- ✅ **NEW**: Time-based automatic progression (2 dispute windows required)
+- ✅ **NEW**: `_updateFinalizationState()` called on every withdrawal (lines 322-345)
 
-**Tests to Update/Rewrite**:
-- Section 20.1: Simple withdrawal still valid but verify new time-based progression
-- Section 20.2: Detailed withdrawal with recentCharges - **OBSOLETE, remove entirely**
-- Section 20.3: Signature-based withdrawal - update for new signature format
-- Section 20.6: View functions - **OBSOLETE**, replace with new three-state queries
-- All sections: Update state assertions (no more `withdrawalNonce`, use three-state amounts)
+**Key Behavioral Changes**:
+1. **Two Dispute Windows Required**: Due to 256-bit storage constraint, detailed charge history not stored. Amounts must pass through two dispute windows:
+   - First: moves `pending` → `finalizing` (when `finalizationTimestamp` + `disputeWindow` passes)
+   - Second: moves `finalizing` → `withdrawable` (when another `disputeWindow` passes after last charge)
+2. **Finalization Batching**: All pending charges finalize together when dispute window passes for `finalizationTimestamp`. Space-optimized design.
+3. **Scope Expiration Independence**: Scope `notAfter` expiration does NOT affect withdrawal timeline. Amounts continue progressing based on original settlement timestamps and dispute windows.
+4. **Amount Scaling**: All amounts stored scaled by `10^amountGranularity`, unscaled on withdrawal.
 
-**New Tests Needed**:
-- Three-state pipeline progression (pending → finalizing → withdrawable)
-- Finalization timestamp updates
-- Cascading dispute deduction from three buckets
-- Multiple withdrawals as amounts progress through states
-- Time-based withdrawal without providing charge data
+**Contract Reference**: See [ZeroLC.sol:830-913](contracts/ZeroLC.sol#L830-L913) for withdrawal implementation.
 
-### 20.1 Simple Withdrawal Method (Empty recentCharges) ✅ COMPLETED (11 tests)
+**Test Count**: 92 tests (was 81, removed 57 obsolete, added 68 new)
 
-- [x] Withdraw when all charges are past dispute window (lastChargeTimestamp + disputeWindow <= block.timestamp)
-- [x] Withdraw to wallet (toWallet = true) successfully transfers ERC20 tokens to agent
-- [x] Withdraw to balance (toWallet = false) credits agent's internal balance
-- [x] Attempt withdrawal when charges still in dispute window (should return 0 withdrawable, revert with "No withdrawable balance")
-- [x] Withdraw updates agentPendingAmount correctly (decreases by withdrawn amount)
-- [x] Withdraw updates withdrawalNonce to nonce - 1
-- [x] Withdraw emits AgentWithdrawal event with correct parameters
-- [x] Withdraw with no charges settled (nonce == 1, should revert "No withdrawable balance")
-- [x] Withdraw at exact dispute window boundary (lastChargeTimestamp + disputeWindow == block.timestamp)
-- [x] Multiple consecutive withdrawals (second should fail with "No withdrawable balance")
-- [x] Withdraw after all charges fully withdrawn (should revert)
+---
 
-### 20.2 Detailed Withdrawal Method (With recentCharges) ✅ COMPLETED (19 tests)
+### 20.1 Basic Withdrawal Flow ⚠️ INCOMPLETE (12 tests)
 
-- [x] Withdraw providing continuous charge sequence from withdrawalNonce + 1
-- [x] Withdraw with single charge batch
-- [x] Withdraw with multiple charge batches
-- [x] Withdraw verifies charge batch signatures
-- [x] Withdraw rejects if batch scope doesn't match (should revert "Scope mismatch")
-- [x] Withdraw rejects if charge batch has future timestamp (should revert "Future charge batch")
-- [x] Withdraw rejects if any batch still in dispute window (should revert "Charge batch still in dispute window")
-- [x] Withdraw accepts batches exactly at dispute window boundary (timestamp == block.timestamp - disputeWindow)
-- [x] Withdraw verifies nonce continuity (must start at withdrawalNonce + 1)
-- [x] Withdraw rejects if nonces have gaps (should revert "Non-continuous nonce sequence")
-- [x] Withdraw rejects if nonces don't start from withdrawalNonce + 1
-- [x] Withdraw rejects if nonces are out of order
-- [x] Withdraw calculates totalWithdrawableCharges correctly
-- [x] Withdraw rejects if provided charges exceed agentPendingAmount (should revert "Provided charges exceed pending amount")
-- [x] Withdraw updates withdrawalNonce to highest provided nonce
-- [x] Withdraw updates agentPendingAmount correctly
-- [x] Withdraw with partial charge sequence (withdraw nonces 1-3, leaving 4-5 for later)
-- [x] Second withdrawal continues from previous withdrawalNonce (withdraw nonces 4-5 after withdrawing 1-3)
-- [x] Withdraw attempts to reuse already withdrawn charges (should revert "Non-continuous nonce sequence")
+- [ ] Withdraw when amounts reach withdrawable state (after 2 dispute windows from settlement)
+- [ ] Withdraw to wallet (toWallet = true) successfully transfers ERC20 tokens to agent
+- [ ] Withdraw to balance (toWallet = false) credits agent's internal balance
+- [ ] Withdrawal fails with NoWithdrawableBalance when only amounts in pending state
+- [ ] Withdrawal fails with NoWithdrawableBalance when only amounts in finalizing state
+- [ ] Withdraw updates chargedAmountWithdrawable to 0 after successful withdrawal
+- [ ] Withdraw emits AgentWithdrawal event with correct parameters (unscaled amount, toWallet flag)
+- [ ] Withdraw with no charges settled (all three-state amounts == 0, should revert NoWithdrawableBalance)
+- [ ] Multiple consecutive withdrawals (second fails if no new amounts finalized)
+- [ ] _updateFinalizationState() called automatically on every withdrawal
+- [ ] Withdrawal amount equals exactly chargedAmountWithdrawable (unscaled)
+- [ ] getAgentPendingAmount() shows pending+finalizing but NOT withdrawable amounts
 
-### 20.3 Signature-Based Withdrawal (Third-Party Relayer) ✅ COMPLETED (10 tests)
+### 20.2 Three-State Pipeline Progression ⚠️ INCOMPLETE (15 tests)
 
-- [x] Third-party submits withdrawal with valid agent signature
-- [x] Withdrawal signature uses correct EIP-712 structure: WithdrawAgentChargedFund(bytes32 scopeHash,bool toWallet,bytes32 recentChargesHash,uint256 nonce)
-- [x] Signature verification uses universalSigValidator
-- [x] Signature with wrong scopeHash (should revert "Invalid withdrawal signature")
-- [x] Signature with wrong toWallet value (should revert "Invalid withdrawal signature")
-- [x] Signature with wrong recentChargesHash (should revert "Invalid withdrawal signature")
-- [x] Signature with wrong nonce (should revert "Invalid withdrawal signature")
-- [x] Signature from non-agent address (should revert "Invalid withdrawal signature")
-- [x] Signature replay attack prevented (nonce increments after successful withdrawal)
-- [x] Nonce increments correctly after signature-based withdrawal
-- [x] Multiple signature-based withdrawals with incrementing nonces
-- [ ] Signature with ERC-1271 smart wallet (not tested yet)
-- [ ] Signature with ERC-6492 counterfactual signature (not tested yet)
+- [ ] New charges start in chargedAmountPending after settlement
+- [ ] chargedAmountFinalizing and chargedAmountWithdrawable initially zero on scope registration
+- [ ] After 1st dispute window (finalizationTimestamp + disputeWindow): pending → finalizing, old finalizing → withdrawable
+- [ ] After 2nd dispute window (lastChargeTimestamp + disputeWindow): newly finalized amounts → withdrawable
+- [ ] Multiple settlements accumulate in chargedAmountPending (batched together)
+- [ ] Withdrawal only succeeds when chargedAmountWithdrawable > 0
+- [ ] Withdrawal fails with NoWithdrawableBalance when only pending amounts exist
+- [ ] Withdrawal fails with NoWithdrawableBalance when only finalizing amounts exist
+- [ ] getAgentPendingAmount() returns sum of chargedAmountPending + chargedAmountFinalizing (excludes withdrawable)
+- [ ] State progression at exact boundary: block.timestamp == finalizationTimestamp + disputeWindow
+- [ ] State progression 1 second before boundary (should NOT progress yet)
+- [ ] Pipeline progression with amountGranularity = 3 (verify scaled storage, unscaled retrieval)
+- [ ] Pipeline progression with amountGranularity = 6 (USDC-like)
+- [ ] Pipeline progression with amountGranularity = 12 (high precision)
+- [ ] Verify unscaling on withdrawal: withdrawn amount == chargedAmountWithdrawable * 10^amountGranularity
 
-### 20.4 Access Control & Authorization ✅ COMPLETED (3 tests)
+### 20.3 Signature-Based Withdrawal ⚠️ INCOMPLETE (8 tests)
 
-- [x] Direct withdrawal requires msg.sender == scope.agent
-- [x] Direct withdrawal by non-agent (should revert "Caller is not the agent")
-- [x] Signature-based withdrawal verifies agent signature (not msg.sender)
-- [ ] Withdrawal from non-existent scope (agentPendingAmount == 0) (not explicitly tested, covered by "No withdrawable balance" tests)
+- [ ] Third-party submits withdrawal with valid agent signature (EOA)
+- [ ] Withdrawal signature uses correct EIP-712 structure: WithdrawAgentChargedFund(bytes32 scopeHash,bool toWallet,uint256 nonce)
+- [ ] Signature verification uses universalSigValidator
+- [ ] Signature with wrong scopeHash (should revert InvalidWithdrawalSignature)
+- [ ] Signature with wrong toWallet value (should revert InvalidWithdrawalSignature)
+- [ ] Signature with wrong nonce (should revert InvalidWithdrawalSignature)
+- [ ] Signature from non-agent address (should revert InvalidWithdrawalSignature)
+- [ ] Signature replay attack prevented (nonce increments after successful withdrawal, lines 866)
+- [ ] Signature with ERC-1271 smart wallet
+- [ ] Signature with ERC-6492 counterfactual signature
 
-### 20.5 State Updates & Side Effects (Covered in 20.1 and 20.2)
+### 20.4 Access Control & Authorization ⚠️ INCOMPLETE (3 tests)
 
-- [x] Withdrawal decreases agentPendingAmount by exact withdrawn amount (tested in 20.1, 20.2)
-- [x] Withdrawal updates withdrawalNonce correctly (simple method: nonce - 1) (tested in 20.1)
-- [x] Withdrawal updates withdrawalNonce correctly (detailed method: highest provided nonce) (tested in 20.2)
-- [x] Withdrawal to wallet transfers correct ERC20 amount to agent (tested in 20.1, 20.2)
-- [x] Withdrawal to balance increases agent's userState.balance (tested in 20.1)
-- [ ] Withdrawal doesn't affect user's balance (implicitly tested, not explicitly verified)
-- [ ] Withdrawal doesn't affect remainingAmount in scope (implicitly tested, not explicitly verified)
-- [ ] Withdrawal doesn't affect scope notAfter (implicitly tested, not explicitly verified)
-- [ ] Withdrawal doesn't affect lastChargeTimestamp (implicitly tested, not explicitly verified)
+- [ ] Direct withdrawal requires msg.sender == scope.agent (line 835)
+- [ ] Direct withdrawal by non-agent (should revert CallerNotAgent)
+- [ ] Signature-based withdrawal verifies agent signature (bypasses msg.sender check)
 
-### 20.6 View Functions ✅ COMPLETED (11 tests)
+### 20.5 Finalization Timestamp Logic ⚠️ INCOMPLETE (10 tests)
 
-- [x] getWithdrawableAmountSimple returns correct amount when all charges past dispute window
-- [x] getWithdrawableAmountSimple returns 0 when charges still in dispute window
-- [x] getWithdrawableAmountSimple at exact boundary (lastChargeTimestamp + disputeWindow == block.timestamp)
-- [x] getWithdrawableAmountSimple callable by anyone (not just agent)
-- [x] getWithdrawableAmountDetailed returns correct amount with valid charge sequence
-- [x] getWithdrawableAmountDetailed with partial charge sequence
-- [x] getWithdrawableAmountDetailed callable by anyone
-- [ ] getWithdrawableAmountDetailed with invalid charge sequence (should revert) (not tested - view function doesn't revert on invalid input)
-- [x] getAgentPendingAmount returns correct total pending amount
-- [x] getAgentPendingAmount callable by anyone
-- [x] getAgentWithdrawalNonce returns correct withdrawal nonce
-- [x] getAgentWithdrawalNonce returns 0 for new scope
-- [x] getAgentWithdrawalNonce callable by anyone
+- [ ] Initial finalizationTimestamp set to notBefore offset: notAfter - notBefore (line 477)
+- [ ] Initial lastChargeTimestamp set to current time offset: notAfter - block.timestamp (line 478)
+- [ ] After progression: finalizationTimestamp updated to lastChargeTimestamp (line 342)
+- [ ] Multiple charges settled: lastChargeTimestamp updates to latest batch timestamp (line 593-596)
+- [ ] All pending charges finalize together (batching behavior)
+- [ ] Finalization timestamp offset fits in uint32 (notAfter - timestamp <= type(uint32).max)
+- [ ] Real timestamp calculation: notAfter - offset (lines 327-330, 561-564)
+- [ ] _updateFinalizationState() checks: block.timestamp >= (notAfter - finalizationTimestamp) + disputeWindow (line 333)
+- [ ] Finalization check boundary: exact equality triggers progression
+- [ ] Timestamp offset arithmetic edge cases (very short and very long durations)
 
-### 20.7 Edge Cases & Boundary Conditions ✅ COMPLETED (11 tests)
+### 20.6 Cascading Withdrawals Over Time ⚠️ INCOMPLETE (8 tests)
 
-- [x] Withdraw with agentPendingAmount at uint48 max
-- [x] Withdraw with large nonce values (tested with 1000 charges)
-- [x] Withdraw with exactly 1 wei
-- [x] Withdraw with scope that has expired (notAfter < block.timestamp) but charges past dispute
-- [x] Withdrawal when no charges have been settled yet (should revert)
-- [x] Withdrawal when charges still within dispute window (should revert)
-- [x] Withdrawal at exact dispute window boundary
-- [x] Withdrawal at 1 second before dispute window expires (should revert)
-- [x] Multiple partial withdrawals correctly tracked
-- [x] Double withdrawal prevention (withdrawing same charges twice)
-- [x] Zero dispute window validation (should reject during registration)
+- [ ] 1st withdrawal attempt (t=0, immediately after settlement): fails with NoWithdrawableBalance (amounts in pending)
+- [ ] 2nd withdrawal attempt (t = disputeWindow): fails with NoWithdrawableBalance (amounts in finalizing, not withdrawable yet)
+- [ ] 3rd withdrawal attempt (t = 2*disputeWindow): succeeds (amounts reach withdrawable state)
+- [ ] 4th withdrawal attempt (immediately after 3rd): fails with NoWithdrawableBalance (no new withdrawable amounts)
+- [ ] 5th withdrawal attempt (after new settlements + 2 dispute windows): succeeds (new batch finalized)
+- [ ] Withdrawal extracts full chargedAmountWithdrawable amount (lines 892-902)
+- [ ] chargedAmountWithdrawable cleared to 0 after successful withdrawal (line 896)
+- [ ] Multiple settlements between withdrawals accumulate correctly in pipeline
 
-### 20.8 Integration Scenarios ✅ COMPLETED (8 tests)
+### 20.7 Edge Cases & Boundary Conditions ⚠️ INCOMPLETE (12 tests)
 
-- [x] Multiple agents from same user withdrawing independently
-- [x] Withdrawal after scope revocation (remaining charges)
-- [x] Withdrawal to balance vs wallet in same scope
-- [x] Interleaved settle and withdraw operations
-- [x] Withdrawal using both simple and detailed methods
-- [x] Withdrawal after user compaction
-- [x] Multiple scopes for same agent
-- [x] Large batch withdrawal with many charge entries (50 entries)
+- [ ] Withdraw with chargedAmountWithdrawable at uint32 max (scaled)
+- [ ] Withdraw with exactly 1 scaled unit (verify unscaling to 10^granularity wei)
+- [ ] Withdrawal when no charges have been settled yet (all three-state amounts == 0, should revert)
+- [ ] Withdrawal at exact finalization boundary: block.timestamp == finalizationTimestamp + disputeWindow
+- [ ] Withdrawal at 1 second before finalization boundary (should not progress yet)
+- [ ] Multiple partial withdrawals correctly tracked through pipeline states
+- [ ] Double withdrawal prevention (second attempt fails with NoWithdrawableBalance)
+- [ ] Withdraw with amountGranularity = 0 (no scaling)
+- [ ] Withdraw with amountGranularity = 18 (maximum scaling)
+- [ ] Timestamp offset overflow protection (notAfter - timestamp must fit in uint32)
+- [ ] Very short dispute window (10 seconds) with pipeline progression
+- [ ] Very long dispute window (100 years) with pipeline progression
 
-### 20.9 Security & Attack Vectors ✅ COMPLETED (8 tests)
+### 20.8 Integration Scenarios ⚠️ INCOMPLETE (8 tests)
 
-- [x] Cannot withdraw as non-agent (CallerNotAgent error)
-- [x] Cannot withdraw with incorrect scope data
-- [x] Cannot skip charges to inflate withdrawable amount (nonce continuity check)
-- [x] Cannot withdraw charges still in dispute window (BatchStillInDisputeWindow)
-- [x] Cannot withdraw more than agentPendingAmount (ChargesExceedPendingAmount)
-- [x] Cannot use mismatched scope hash in detailed method (ScopeMismatch)
-- [x] Invalid signature rejection for third-party withdrawal
-- [x] Overflow protection in amount calculations (tested with max uint48)
+- [ ] Multiple agents from same user withdrawing independently (separate pipelines)
+- [ ] Withdrawal after scope revocation (amounts continue progressing in pipeline)
+- [ ] Withdrawal to balance vs wallet in same scope (both modes work)
+- [ ] Interleaved settle and withdraw operations (withdrawals extract only withdrawable amounts)
+- [ ] Withdrawal after user compaction (pipeline states preserved)
+- [ ] Multiple scopes for same agent (independent pipelines)
+- [ ] Large amount withdrawal (test gas efficiency with max uint32 scaled amount)
+- [ ] Withdrawal with mixed granularities across multiple scopes
 
-### 20.10 Gas Optimization Validation
+### 20.9 Security & Attack Vectors ⚠️ INCOMPLETE (7 tests)
 
-- [ ] Simple method uses less gas than detailed method
-- [ ] Withdrawing larger sequences is gas-efficient
-- [ ] View functions are gas-efficient for off-chain queries
+- [ ] Cannot withdraw as non-agent (CallerNotAgent error, line 835)
+- [ ] Cannot withdraw with incorrect scope data (signature validation fails)
+- [ ] Cannot withdraw amounts still in pending state (NoWithdrawableBalance)
+- [ ] Cannot withdraw amounts still in finalizing state (NoWithdrawableBalance)
+- [ ] Invalid signature rejection for third-party withdrawal (line 862)
+- [ ] Overflow protection in amount unscaling (uint32 * 10^granularity must fit in uint128)
+- [ ] Cannot manipulate finalization timestamps to accelerate withdrawal
+
+### 20.10 Dispute Impact on Withdrawal Pipeline ⚠️ INCOMPLETE (9 tests)
+
+- [ ] Dispute deducts from chargedAmountFinalizing before chargedAmountPending (lines 688-703)
+- [ ] Dispute cannot claw back chargedAmountWithdrawable (finalized, protected by cascading logic)
+- [ ] Dispute sets scope notAfter to block.timestamp (line 709) but doesn't affect pipeline timing
+- [ ] Withdrawal still works after dispute (timeline uses original timestamps, not modified notAfter)
+- [ ] Dispute during pending state: reduces chargedAmountPending correctly
+- [ ] Dispute during finalizing state: reduces chargedAmountFinalizing correctly
+- [ ] Dispute after amounts reach withdrawable: cannot claw back (InsufficientPendingBalance error)
+- [ ] Multiple disputes cascade through finalizing → pending correctly (lines 683-705)
+- [ ] Withdrawal after dispute returns reduced amount (reflects clawback deductions)
+
+### 20.11 Scope Expiration Independence ⚠️ INCOMPLETE (6 tests)
+
+- [ ] Scope expires (notAfter passes) while amounts in pending state
+- [ ] Amounts continue progressing pending → finalizing → withdrawable after scope expiration
+- [ ] Withdrawal works after scope expiration (uses finalizationTimestamp/lastChargeTimestamp, not notAfter)
+- [ ] Compaction doesn't affect pipeline amounts (chargedAmountPending/Finalizing/Withdrawable preserved, lines 356-384)
+- [ ] Expired scope with withdrawable amounts can be withdrawn successfully
+- [ ] Dispute after scope expiration still follows original timeline (not affected by notAfter = block.timestamp)
+
+### 20.12 View Function - getAgentPendingAmount ⚠️ INCOMPLETE (4 tests)
+
+- [ ] getAgentPendingAmount() returns sum of chargedAmountPending + chargedAmountFinalizing (line 876-878)
+- [ ] getAgentPendingAmount() excludes chargedAmountWithdrawable (those are finalized, not "pending")
+- [ ] getAgentPendingAmount() returns unscaled amount: (pending + finalizing) * 10^amountGranularity (line 878)
+- [ ] getAgentPendingAmount() callable by anyone (public view function, line 871-879)
 
 ---
 
 ## Section 20 Summary
 
-**Total Tests Implemented**: 81 passing tests
-**Test File**: `test/ZeroLC/ZeroLC.withdrawal.test.ts`
-**Coverage**: Complete coverage of agent withdrawal functionality including:
+**Total Tests Planned**: 92 tests (0 implemented)
+**Test File**: `test/ZeroLC/ZeroLC.withdrawal.test.ts` (REQUIRES COMPLETE REWRITE)
 
-- ✅ Simple withdrawal method (empty recentCharges) - 11 tests
-- ✅ Detailed withdrawal method (with recentCharges) - 19 tests
-- ✅ Signature-based withdrawal (third-party relayer) - 10 tests
-- ✅ Access control & authorization - 3 tests
-- ✅ View functions - 11 tests
-- ✅ Edge cases & boundary conditions - 11 tests
-- ✅ Integration scenarios - 8 tests
-- ✅ Security & attack vectors - 8 tests
+**Test Breakdown**:
+- [ ] Section 20.1 - Basic Withdrawal Flow - 12 tests
+- [ ] Section 20.2 - Three-State Pipeline Progression - 15 tests
+- [ ] Section 20.3 - Signature-Based Withdrawal - 8 tests (updated, EIP-712 structure changed)
+- [ ] Section 20.4 - Access Control & Authorization - 3 tests
+- [ ] Section 20.5 - Finalization Timestamp Logic - 10 tests (NEW)
+- [ ] Section 20.6 - Cascading Withdrawals Over Time - 8 tests (NEW)
+- [ ] Section 20.7 - Edge Cases & Boundary Conditions - 12 tests (updated)
+- [ ] Section 20.8 - Integration Scenarios - 8 tests (updated)
+- [ ] Section 20.9 - Security & Attack Vectors - 7 tests (updated)
+- [ ] Section 20.10 - Dispute Impact on Withdrawal Pipeline - 9 tests (NEW)
+- [ ] Section 20.11 - Scope Expiration Independence - 6 tests (NEW)
+- [ ] Section 20.12 - View Function - 4 tests (NEW)
 
-**Key Features Tested**:
-- Both withdrawal methods (simple and detailed)
-- Dispute window enforcement
-- Nonce continuity validation
-- Signature verification (EOA and third-party)
-- State updates (agentPendingAmount, withdrawalNonce)
-- Event emissions
-- Error handling and access control
-- Edge cases (max values, boundary conditions, timing)
-- Integration scenarios (multiple agents, scopes, interleaved operations)
-- Security protections (replay attacks, unauthorized access, data integrity)
+**Coverage Goals**:
+- ✅ Three-state pipeline progression (pending → finalizing → withdrawable)
+- ✅ Two-dispute-window finalization requirement (space-optimized design)
+- ✅ Finalization timestamp logic and batching behavior
+- ✅ Time-based progression (no charge batch submission needed)
+- ✅ Dispute cascading deduction impact on pipeline states
+- ✅ Scope expiration independence from withdrawal timeline
+- ✅ Amount granularity support (0, 3, 6, 12, 18)
+- ✅ Signature verification (EOA, ERC-1271, ERC-6492)
+- ✅ State updates (three-state amounts, finalization/lastCharge timestamps)
+- ✅ Event emissions (AgentWithdrawal with unscaled amounts)
+- ✅ Edge cases (timing boundaries, max scaled amounts, empty withdrawals)
+- ✅ Integration (multiple agents/scopes, compaction, revocation)
+- ✅ Security (access control, overflow protection, state integrity, timeline manipulation prevention)
+
+**Key Test Patterns for Implementation**:
+
+1. **Two-Dispute-Window Pattern**:
+   ```typescript
+   // Settlement
+   await settleCharges([chargeBatch]);
+   // Verify: amounts in pending, withdrawal fails
+
+   // Wait 1st dispute window
+   await time.increase(disputeWindow + 1);
+   // Verify: amounts in finalizing, withdrawal still fails
+
+   // Wait 2nd dispute window
+   await time.increase(disputeWindow + 1);
+   // Verify: amounts in withdrawable, withdrawal succeeds
+   ```
+
+2. **Batched Finalization Pattern**:
+   ```typescript
+   // Multiple settlements
+   await settleCharges([batch1]);
+   await time.increase(10);
+   await settleCharges([batch2]);
+   await time.increase(10);
+   await settleCharges([batch3]);
+   // All charges accumulate in pending
+
+   // Wait 2 dispute windows from last charge
+   await time.increase(2 * disputeWindow + 1);
+   // All charges finalize together → withdrawable
+   ```
+
+3. **Scope Expiration Independence Pattern**:
+   ```typescript
+   // Settle charges
+   await settleCharges([chargeBatch]);
+
+   // Expire scope
+   await time.increase(scope.notAfter - await time.latest() + 1);
+   // Verify: scope expired (notAfter < block.timestamp)
+
+   // Continue waiting for finalization
+   await time.increase(2 * disputeWindow + 1);
+   // Verify: withdrawal still works (uses original timestamps)
+   ```
+
+4. **Dispute Impact Pattern**:
+   ```typescript
+   // Settle → amounts in pending
+   await settleCharges([batch]);
+
+   // Wait 1 dispute window → amounts in finalizing
+   await time.increase(disputeWindow + 1);
+
+   // Dispute claws back from finalizing
+   await dispute([disputeData]);
+   // Verify: chargedAmountFinalizing reduced
+
+   // Wait another dispute window
+   await time.increase(disputeWindow + 1);
+   // Verify: reduced amount now withdrawable
+   ```
+
+**Helper Functions Needed**:
+- `createAuthorizationScope()` - with `amountGranularity` parameter
+- `registerScope()` - wrapper for registration
+- `createChargeBatch()` - with `scaledAmount` (not `amount`)
+- `calculateScaledAmount()` - for amount scaling: `amount / 10^granularity`
+- `getAuthorizationScopeData()` - to fetch unscaled metadata
+- `waitForFinalization()` - helper to advance time by 2 dispute windows
 
 ---
 
@@ -1006,7 +1096,7 @@ test/
 
 **Total Tests**: 300+
 
-**Completed**: 472 tests (+58 from Section 6 dispute updates)
+**Completed**: 391 tests (was 472, -81 obsolete withdrawal tests)
 - Section 2.1 - Direct Deposit (7 tests)
 - Section 2.2 - Deposit with Signature (21 tests including nonce/replay protection)
 - Section 2.3 - Gas Token Integration (14 tests including 6-decimal token support)
@@ -1053,17 +1143,55 @@ test/
 - **Section 8.4 - Amount Granularity (6 tests - NEW SECTION)** ✅ NEW
 - **Section 8.5 - Three-State Amount Fields (5 tests - NEW SECTION)** ✅ NEW
 - **Section 8.6 - Helper View Methods (2 tests - NEW SECTION)** ✅ NEW
-- **Section 20.1 - Simple Withdrawal Method (11 tests)** ✅ NEW
-- **Section 20.2 - Detailed Withdrawal Method (19 tests)** ✅ NEW
-- **Section 20.3 - Signature-Based Withdrawal (10 tests)** ✅ NEW
-- **Section 20.4 - Access Control & Authorization (3 tests)** ✅ NEW
-- **Section 20.6 - View Functions (11 tests)** ✅ NEW
-- Additional tests: 9 tests covering multiple users and edge cases
 
 **In Progress**: 0
-**Not Started**: Sections 20.7-20.10 (edge cases, integration, security for withdrawals), plus Sections 1, 9-19, 21
+**Not Started**: Section 20 - Agent Withdrawal Tests (92 tests - COMPLETE REWRITE NEEDED), plus Sections 1, 9-19, 21
 
 ### Recent Updates
+
+**2025-01-10**: ⚠️ **Updated Section 20 - Agent Withdrawal Tests** (92 tests planned, 0 implemented)
+- **File**: `dev/ZeroLC-Test-Plan.md` (test plan updated, implementation pending)
+- **Status**: Complete rewrite needed for three-state withdrawal system
+- **Key Changes**:
+  - ❌ Removed 57 obsolete tests (detailed withdrawal method with `recentCharges`, old view functions)
+  - ✅ Added 68 new tests for three-state pipeline system
+  - ✅ Net change: +11 tests (92 total, was 81)
+  - ✅ All tests marked incomplete and ready for implementation
+- **Breaking Changes Documented**:
+  - `recentCharges` parameter removed from `withdrawAgentChargedFund()`
+  - `withdrawalNonce`, `getAgentWithdrawalNonce()`, `getWithdrawableAmountSimple/Detailed()` removed
+  - Three-state pipeline: `pending` → `finalizing` → `withdrawable` (2 dispute windows required)
+  - Finalization timestamp batching (space-optimized design due to 256-bit storage constraint)
+  - Scope expiration independence (withdrawal timeline unaffected by `notAfter`)
+- **New Test Sections**:
+  - Section 20.2 - Three-State Pipeline Progression (15 tests)
+  - Section 20.5 - Finalization Timestamp Logic (10 tests)
+  - Section 20.6 - Cascading Withdrawals Over Time (8 tests)
+  - Section 20.10 - Dispute Impact on Withdrawal Pipeline (9 tests)
+  - Section 20.11 - Scope Expiration Independence (6 tests)
+  - Section 20.12 - View Function - getAgentPendingAmount (4 tests)
+- **Updated Test Sections**:
+  - Section 20.1 - Basic Withdrawal Flow (12 tests, updated for time-based progression)
+  - Section 20.3 - Signature-Based Withdrawal (8 tests, new EIP-712 structure without `recentChargesHash`)
+  - Section 20.7 - Edge Cases & Boundary Conditions (12 tests, updated for scaled amounts)
+  - Section 20.8 - Integration Scenarios (8 tests, updated for pipeline behavior)
+  - Section 20.9 - Security & Attack Vectors (7 tests, updated for three-state protections)
+- **Key Test Patterns Documented**:
+  - Two-dispute-window pattern (settlement → 2 dispute windows → withdrawable)
+  - Batched finalization pattern (multiple settlements accumulate, finalize together)
+  - Scope expiration independence pattern (timeline unaffected by expiration)
+  - Dispute impact pattern (cascading deduction from finalizing → pending)
+- **Helper Functions Identified**:
+  - `createAuthorizationScope()` with `amountGranularity`
+  - `createChargeBatch()` with `scaledAmount`
+  - `calculateScaledAmount()` for scaling calculations
+  - `getAuthorizationScopeData()` for metadata retrieval
+  - `waitForFinalization()` helper to advance time by 2 dispute windows
+- **Contract References Added**: Lines 322-345 (_updateFinalizationState), 830-913 (withdrawal implementation)
+- **Design Constraints Documented**:
+  - Two dispute windows intentional (256-bit storage constraint, no space for detailed charge history)
+  - Finalization batching intentional (space optimization)
+  - Scope expiration independence confirmed (timeline proceeds independently)
 
 **2025-01-09**: ✅ **Updated Section 6 - Dispute Tests** (58 tests total, +18 new)
 - **File**: [test/ZeroLC/ZeroLC.dispute.test.ts](test/ZeroLC/ZeroLC.dispute.test.ts)
