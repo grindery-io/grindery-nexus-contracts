@@ -813,7 +813,7 @@ This behavior is **intentional and correct** - it ensures proper dispute window 
 
 **Contract Reference**: See [ZeroLC.sol:854-925](contracts/ZeroLC.sol#L854-L925) for withdrawal implementation with comprehensive finalization timing documentation.
 
-**Test Count**: 48 tests completed (12 in Section 20.1, 15 in Section 20.2, 10 in Section 20.3, 3 in Section 20.4, 8 in Section 20.6), 44 tests remaining
+**Test Count**: 57 tests completed (12 in Section 20.1, 14 in Section 20.2, 10 in Section 20.3, 3 in Section 20.4, 10 in Section 20.5, 8 in Section 20.6), 35 tests remaining
 
 ---
 
@@ -834,7 +834,7 @@ This behavior is **intentional and correct** - it ensures proper dispute window 
 - [x] Withdrawal amount equals exactly chargedAmountWithdrawable (unscaled)
 - [x] getAgentPendingAmount() shows pending+finalizing but NOT withdrawable amounts
 
-### 20.2 Three-State Pipeline Progression ✅ COMPLETE (15 tests)
+### 20.2 Three-State Pipeline Progression ✅ COMPLETE (14 tests)
 
 **IMPORTANT FINALIZATION TIMING BEHAVIOR DISCOVERED**:
 
@@ -927,18 +927,37 @@ The finalization system has subtle timing behavior that depends on REAL TIME ela
 - ✅ Signature-based withdrawal verifies agent signature (bypasses msg.sender check)
 - ✅ All 3 tests passing
 
-### 20.5 Finalization Timestamp Logic ⚠️ INCOMPLETE (10 tests)
+### 20.5 Finalization Timestamp Logic ✅ COMPLETE (10 tests)
 
-- [ ] Initial finalizationTimestamp set to notBefore offset: notAfter - notBefore (line 477)
-- [ ] Initial lastChargeTimestamp set to current time offset: notAfter - block.timestamp (line 478)
-- [ ] After progression: finalizationTimestamp updated to lastChargeTimestamp (line 342)
-- [ ] Multiple charges settled: lastChargeTimestamp updates to latest batch timestamp (line 593-596)
-- [ ] All pending charges finalize together (batching behavior)
-- [ ] Finalization timestamp offset fits in uint32 (notAfter - timestamp <= type(uint32).max)
-- [ ] Real timestamp calculation: notAfter - offset (lines 327-330, 561-564)
-- [ ] _updateFinalizationState() checks: block.timestamp >= (notAfter - finalizationTimestamp) + disputeWindow (line 333)
-- [ ] Finalization check boundary: exact equality triggers progression
-- [ ] Timestamp offset arithmetic edge cases (very short and very long durations)
+**Implementation Notes**:
+- Timestamps are stored as offsets: `offset = notAfter - realTimestamp` (fits in uint32)
+- Both `finalizationTimestamp` and `lastChargeTimestamp` initialize to represent epoch (timestamp 0)
+- Initialization logic (lines 492-503): sets both to `min(type(uint32).max, scope.notAfter)`
+- Before year 2106: offset = notAfter (represents real timestamp 0)
+- After year 2106: offset = type(uint32).max (notAfter exceeds uint32 bounds)
+- `finalizationTimestamp` updates to `lastChargeTimestamp` after progression (line 346)
+- `lastChargeTimestamp` updates to latest batch timestamp offset on each settlement (line 618-621)
+
+**Covered Scenarios**:
+1. ✅ Initialization with epoch timestamps (pre-2106): Both timestamps set to notAfter offset
+2. ✅ Initialization capped at uint32.max (post-2106): Both timestamps set to type(uint32).max
+3. ✅ Settlement updates lastChargeTimestamp to batch timestamp offset
+4. ✅ First progression updates finalizationTimestamp to lastChargeTimestamp (line 346)
+5. ✅ Offset arithmetic verification: realTimestamp = notAfter - offset
+6. ✅ Exact boundary finalization: block.timestamp == finalizationTimestamp + disputeWindow
+7. ✅ Multiple settlements update lastChargeTimestamp to latest batch timestamp
+8. ✅ Batch finalization: All pending charges finalize together when time elapses
+9. ✅ Short duration scope edge case (1 hour): Offset calculations with small values
+10. ✅ Long duration scope edge case (1 year): Offsets fit within uint32 bounds
+
+**Updates Applied (2025-01-11)**:
+- ✅ Implemented 10 comprehensive tests for finalization timestamp logic
+- ✅ Tests cover both pre-2106 and post-2106 initialization behavior
+- ✅ Validates offset storage mechanism and arithmetic (notAfter - realTimestamp)
+- ✅ Tests finalization state transitions and timestamp updates
+- ✅ Covers exact boundary conditions and batching behavior
+- ✅ Tests edge cases for very short and very long scope durations
+- ✅ All 10 tests passing
 
 ### 20.6 Cascading Withdrawals Over Time ✅ COMPLETE (8 tests)
 

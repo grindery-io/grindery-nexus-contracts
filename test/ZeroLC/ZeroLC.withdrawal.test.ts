@@ -1939,6 +1939,303 @@ describe("ZeroLC - Agent Withdrawal", function () {
   });
 
   // ============================================================================
+  // Section 20.5 - Finalization Timestamp Logic (10 tests)
+  // Tests for timestamp offset arithmetic and finalization state transitions
+  // ============================================================================
+
+  describe("Section 20.5 - Finalization Timestamp Logic", function () {
+    const CHARGE_AMOUNT = 100000n; // 100k wei
+    const DISPUTE_WINDOW = 3600; // 1 hour
+
+    it("should initialize both finalizationTimestamp and lastChargeTimestamp to represent epoch (timestamp 0)", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
+
+      // Setup: Register a scope (notAfter will be less than type(uint32).max before year 2106)
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, currentTime + 86400);
+
+      // Get scope state
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // Both timestamps should be set to notAfter (which represents offset for timestamp 0)
+      // offset = notAfter - realTimestamp, so offset = notAfter means realTimestamp = 0
+      expect(state.finalizationTimestamp).to.equal(scope.notAfter);
+      expect(state.lastChargeTimestamp).to.equal(scope.notAfter);
+      expect(state.finalizationTimestamp).to.equal(state.lastChargeTimestamp);
+    });
+
+    it("should initialize timestamps to type(uint32).max when notAfter > type(uint32).max (post-2106)", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope } = await loadFixture(deployZeroLCFixture);
+
+      // Setup: Register a scope with notAfter after year 2106 (> type(uint32).max = 4,294,967,295)
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const futureNotAfter = 2n ** 32n + 1000n; // Just past uint32 max
+      const scope = await registerScope(
+        user1,
+        agent1,
+        1000000n,
+        DISPUTE_WINDOW,
+        currentTime,
+        Number(futureNotAfter)
+      );
+
+      // Get scope state
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // Both timestamps should be capped at type(uint32).max
+      const uint32Max = 2n ** 32n - 1n;
+      expect(state.finalizationTimestamp).to.equal(uint32Max);
+      expect(state.lastChargeTimestamp).to.equal(uint32Max);
+    });
+
+    it("should update lastChargeTimestamp to batch timestamp offset after settlement", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, currentTime + 86400);
+
+      // Settle a charge
+      const settlementTime = await time.latest();
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: scope.notAfter }]);
+
+      // Get scope state
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // lastChargeTimestamp should be updated to offset of settlement time
+      const expectedOffset = scope.notAfter - settlementTime;
+      expect(state.lastChargeTimestamp).to.equal(expectedOffset);
+
+      // finalizationTimestamp should still be at original value (notAfter, representing epoch)
+      expect(state.finalizationTimestamp).to.equal(scope.notAfter);
+    });
+
+    it("should update finalizationTimestamp to lastChargeTimestamp after first progression", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup and first settlement
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, currentTime + 86400);
+
+      const firstSettlementTime = await time.latest();
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: scope.notAfter }]);
+
+      // Second settlement triggers finalization (epoch + disputeWindow has definitely passed)
+      await time.increase(5); // Small time increase
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 2, notAfter: scope.notAfter }]);
+
+      // Get scope state
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // After progression, finalizationTimestamp should equal lastChargeTimestamp from first settlement
+      const expectedOffset = scope.notAfter - firstSettlementTime;
+      expect(state.finalizationTimestamp).to.equal(expectedOffset);
+
+      // Amounts should have moved: first charge in finalizing, second in pending
+      expect(state.chargedAmountFinalizing).to.equal(CHARGE_AMOUNT);
+      expect(state.chargedAmountPending).to.equal(CHARGE_AMOUNT);
+    });
+
+    it("should calculate real timestamp correctly from offset: realTimestamp = notAfter - offset", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup and settlement
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, currentTime + 86400);
+
+      const settlementTime = await time.latest();
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: scope.notAfter }]);
+
+      // Get scope state
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // Verify the offset arithmetic
+      // realTimestamp = notAfter - offset
+      const calculatedTimestamp = scope.notAfter - Number(state.lastChargeTimestamp);
+      expect(calculatedTimestamp).to.equal(settlementTime);
+    });
+
+    it("should finalize at exact boundary: block.timestamp == finalizationTimestamp + disputeWindow", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup and first settlement
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, currentTime + 86400);
+
+      const firstSettlementTime = await time.latest();
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: scope.notAfter }]);
+
+      // Second settlement to move first charge to finalizing
+      await time.increase(5);
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 2, notAfter: scope.notAfter }]);
+
+      // Wait exactly until boundary: firstSettlementTime + disputeWindow
+      const targetTime = firstSettlementTime + DISPUTE_WINDOW;
+      await time.increaseTo(targetTime);
+
+      // Third settlement should trigger finalization at exact boundary
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 3, notAfter: scope.notAfter }]);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // First charge should have moved to withdrawable
+      expect(state.chargedAmountWithdrawable).to.equal(CHARGE_AMOUNT);
+      // Second charge should have moved to finalizing
+      expect(state.chargedAmountFinalizing).to.equal(CHARGE_AMOUNT);
+      // Third charge in pending
+      expect(state.chargedAmountPending).to.equal(CHARGE_AMOUNT);
+    });
+
+    it("should handle multiple charges settling with lastChargeTimestamp updating to latest batch timestamp", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, currentTime + 86400);
+
+      // Settle multiple charges quickly (within seconds)
+      const times = [];
+      for (let i = 1; i <= 3; i++) {
+        const beforeTime = await time.latest();
+        await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: i, notAfter: scope.notAfter }]);
+        times.push(beforeTime);
+        await time.increase(2); // 2 second intervals
+      }
+
+      // Get scope state
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // lastChargeTimestamp should reflect the latest settlement
+      const expectedOffset = scope.notAfter - times[times.length - 1];
+      expect(state.lastChargeTimestamp).to.equal(expectedOffset);
+    });
+
+    it("should batch finalize all pending charges together when enough time passes", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, currentTime + 86400);
+
+      // Settle 3 charges quickly (they'll accumulate in pending after 2nd settlement)
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: scope.notAfter }]);
+      await time.increase(2);
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 2, notAfter: scope.notAfter }]);
+      await time.increase(2);
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 3, notAfter: scope.notAfter }]);
+
+      // After 2nd settlement: charge 1 in finalizing, charges 2-3 in pending
+      let scopeHash = await zeroLC.getScopeHash(scope);
+      let state = await zeroLC.authorizationScopes(scopeHash);
+      expect(state.chargedAmountFinalizing).to.equal(CHARGE_AMOUNT);
+      expect(state.chargedAmountPending).to.equal(CHARGE_AMOUNT * 2n);
+
+      // Wait enough time for finalization (but not enough for double-run to finalize everything)
+      // We want to see charges 2-3 move from pending to finalizing, but not to withdrawable
+      // Settlement 3 was at time ~4 seconds after settlement 1
+      // We need to wait past (settlement 1 + DISPUTE_WINDOW) but before (settlement 3 + DISPUTE_WINDOW)
+      // Settlement 3 is at T1 + 4, we need current < T1 + 4 + DISPUTE_WINDOW
+      // We're currently at T1 + 4, so wait DISPUTE_WINDOW - 5 to be at T1 + DISPUTE_WINDOW - 1
+      await time.increase(DISPUTE_WINDOW - 5);
+
+      // Trigger state update by settling another charge
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 4, notAfter: scope.notAfter }]);
+
+      // Charges should have progressed through the pipeline
+      state = await zeroLC.authorizationScopes(scopeHash);
+      // First charge: finalizing → withdrawable (passed first finalization + DISPUTE_WINDOW)
+      expect(state.chargedAmountWithdrawable).to.equal(CHARGE_AMOUNT);
+      // Charges 2-3: pending → finalizing (batched together in first run)
+      expect(state.chargedAmountFinalizing).to.equal(CHARGE_AMOUNT * 2n);
+      // Charge 4: new settlement → pending
+      expect(state.chargedAmountPending).to.equal(CHARGE_AMOUNT);
+    });
+
+    it("should handle timestamp offset edge case with very short duration scope", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup: Create a scope with very short duration (1 hour)
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const shortNotAfter = currentTime + 3600; // Only 1 hour from now
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, shortNotAfter);
+
+      // Get scope state
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // Timestamps should still be initialized correctly
+      expect(state.finalizationTimestamp).to.equal(scope.notAfter);
+      expect(state.lastChargeTimestamp).to.equal(scope.notAfter);
+
+      // Settle a charge
+      const settlementTime = await time.latest();
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: scope.notAfter }]);
+
+      // Verify offset calculation with short duration
+      const stateAfter = await zeroLC.authorizationScopes(scopeHash);
+      const expectedOffset = scope.notAfter - settlementTime;
+      expect(stateAfter.lastChargeTimestamp).to.equal(expectedOffset);
+
+      // Offset should fit in uint32 (shortNotAfter - settlementTime is very small)
+      expect(expectedOffset).to.be.lessThan(2 ** 32);
+    });
+
+    it("should handle timestamp offset edge case with very long duration scope", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup: Create a scope with very long duration (1 year)
+      await depositForUser(user1, 1000000n);
+      const currentTime = await time.latest();
+      const longNotAfter = currentTime + 365 * 24 * 3600; // 1 year from now
+      const scope = await registerScope(user1, agent1, 1000000n, DISPUTE_WINDOW, currentTime, longNotAfter);
+
+      // Get scope state
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // Timestamps should be initialized correctly
+      expect(state.finalizationTimestamp).to.equal(scope.notAfter);
+      expect(state.lastChargeTimestamp).to.equal(scope.notAfter);
+
+      // Settle a charge
+      const settlementTime = await time.latest();
+      await settleCharges(scope, agent1, [{ scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: scope.notAfter }]);
+
+      // Verify offset calculation with long duration
+      const stateAfter = await zeroLC.authorizationScopes(scopeHash);
+      const expectedOffset = scope.notAfter - settlementTime;
+      expect(stateAfter.lastChargeTimestamp).to.equal(expectedOffset);
+
+      // Offset should still fit in uint32 (1 year in seconds is ~31M, well under 2^32)
+      expect(expectedOffset).to.be.lessThan(2 ** 32);
+    });
+  });
+
+  // ============================================================================
   // Section 20.6 - Cascading Withdrawals Over Time (8 tests)
   // Tests for withdrawal timing through the three-state pipeline
   // ============================================================================
