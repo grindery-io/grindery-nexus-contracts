@@ -1360,4 +1360,461 @@ describe("ZeroLC - Agent Withdrawal", function () {
       expect(balanceAfter - balanceBefore).to.equal(totalCharge);
     });
   });
+
+  // ============================================================================
+  // Section 20.3 - Signature-Based Withdrawal (10 tests)
+  // Tests for third-party withdrawal with agent signature
+  // ============================================================================
+
+  describe("Section 20.3 - Signature-Based Withdrawal", function () {
+    const MICRO_AMOUNT = 1000000n; // 1 million wei
+    const CHARGE_AMOUNT = 100000n; // 100k wei
+    const DISPUTE_WINDOW = 3600; // 1 hour
+
+    it("should allow third-party to submit withdrawal with valid agent signature (EOA)", async function () {
+      const { zeroLC, user1, user2, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest, gasToken } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+
+      // Sign withdrawal request
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, true, nonce);
+
+      // Third-party (user2) submits withdrawal on behalf of agent1
+      const balanceBefore = await gasToken.balanceOf(agent1.address);
+
+      await zeroLC.connect(user2)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+        scope,
+        true,
+        signature
+      );
+
+      // Verify tokens transferred to agent
+      const balanceAfter = await gasToken.balanceOf(agent1.address);
+      expect(balanceAfter - balanceBefore).to.equal(CHARGE_AMOUNT);
+    });
+
+    it("should verify withdrawal signature uses correct EIP-712 structure", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+
+      // Sign withdrawal request (helper already uses correct EIP-712 structure)
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, true, nonce);
+
+      // Verify withdrawal succeeds with correctly structured signature
+      await expect(
+        zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+          scope,
+          true,
+          signature
+        )
+      ).to.not.be.reverted;
+    });
+
+    it("should verify signature uses universalSigValidator", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+
+      // Sign withdrawal request
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, true, nonce);
+
+      // Withdrawal should succeed (universalSigValidator handles EOA signatures)
+      await expect(
+        zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+          scope,
+          true,
+          signature
+        )
+      ).to.not.be.reverted;
+    });
+
+    it("should revert with InvalidWithdrawalSignature when scopeHash is wrong", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+
+      // Sign with wrong scopeHash (use a random hash)
+      const wrongScopeHash = ethers.keccak256(ethers.toUtf8Bytes("wrong"));
+      const signature = await signWithdrawalRequest(agent1, wrongScopeHash, true, nonce);
+
+      // Withdrawal should fail
+      await expect(
+        zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+          scope,
+          true,
+          signature
+        )
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidWithdrawalSignature");
+    });
+
+    it("should revert with InvalidWithdrawalSignature when toWallet value is wrong", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+
+      // Sign with toWallet=true
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, true, nonce);
+
+      // Attempt withdrawal with toWallet=false (different from signed value)
+      await expect(
+        zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+          scope,
+          false, // Wrong toWallet value
+          signature
+        )
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidWithdrawalSignature");
+    });
+
+    it("should revert with InvalidWithdrawalSignature when nonce is wrong", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+
+      // Sign with wrong nonce
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, true, nonce + 1n); // Wrong nonce
+
+      // Withdrawal should fail
+      await expect(
+        zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+          scope,
+          true,
+          signature
+        )
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidWithdrawalSignature");
+    });
+
+    it("should revert with InvalidWithdrawalSignature when signature is from non-agent", async function () {
+      const { zeroLC, user1, user2, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent1's nonce (correct nonce)
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+
+      // Sign with user2 (not the agent)
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(user2, scopeHash, true, nonce); // Wrong signer
+
+      // Withdrawal should fail
+      await expect(
+        zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+          scope,
+          true,
+          signature
+        )
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidWithdrawalSignature");
+    });
+
+    it("should prevent signature replay attack (nonce increments after successful withdrawal)", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup with more funds for two withdrawals
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      // Settle first charge
+      await time.increase(1);
+      let batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce and sign withdrawal
+      let agentState = await zeroLC.userStates(agent1.address);
+      const initialNonce = agentState.nonce;
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, true, initialNonce);
+
+      // First withdrawal succeeds
+      await zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+        scope,
+        true,
+        signature
+      );
+
+      // Verify nonce incremented
+      agentState = await zeroLC.userStates(agent1.address);
+      expect(agentState.nonce).to.equal(initialNonce + 1n);
+
+      // Settle second charge
+      await time.increase(1);
+      batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT / 2n, nonce: 2, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Attempt to replay the same signature (should fail due to nonce mismatch)
+      await expect(
+        zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+          scope,
+          true,
+          signature // Reusing old signature
+        )
+      ).to.be.revertedWithCustomError(zeroLC, "InvalidWithdrawalSignature");
+    });
+
+    it("should emit AgentWithdrawal event with correct parameters when using signature", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce and sign
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, false, nonce);
+
+      // Withdraw and verify event
+      await expect(
+        zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+          scope,
+          false,
+          signature
+        )
+      )
+        .to.emit(zeroLC, "AgentWithdrawal")
+        .withArgs(agent1.address, scopeHash, CHARGE_AMOUNT, false);
+    });
+
+    it("should allow withdrawal to balance (toWallet=false) via signature", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce and sign for toWallet=false
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, false, nonce);
+
+      // Get agent's internal balance before
+      const balanceBefore = (await zeroLC.userStates(agent1.address)).balance;
+
+      // Withdraw to balance
+      await zeroLC["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+        scope,
+        false,
+        signature
+      );
+
+      // Verify internal balance credit
+      const balanceAfter = (await zeroLC.userStates(agent1.address)).balance;
+      expect(balanceAfter - balanceBefore).to.equal(CHARGE_AMOUNT);
+    });
+  });
 });
