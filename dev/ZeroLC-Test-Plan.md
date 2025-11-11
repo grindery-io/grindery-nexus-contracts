@@ -775,7 +775,7 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 ## 20. Agent Withdrawal Tests ⚙️ IN PROGRESS (92 tests total)
 
-**Status**: Sections 20.1, 20.2, 20.3, and 20.4 COMPLETE (40/92 tests). Critical finalization timing behavior documented.
+**Status**: Sections 20.1, 20.2, 20.3, 20.4, and 20.6 COMPLETE (48/92 tests). Critical finalization timing behavior documented.
 
 **Breaking Changes in Three-State System**:
 - ❌ **`recentCharges` parameter REMOVED** from `withdrawAgentChargedFund()`
@@ -813,7 +813,7 @@ This behavior is **intentional and correct** - it ensures proper dispute window 
 
 **Contract Reference**: See [ZeroLC.sol:854-925](contracts/ZeroLC.sol#L854-L925) for withdrawal implementation with comprehensive finalization timing documentation.
 
-**Test Count**: 40 tests completed (12 in Section 20.1, 15 in Section 20.2, 10 in Section 20.3, 3 in Section 20.4), 52 tests remaining
+**Test Count**: 48 tests completed (12 in Section 20.1, 15 in Section 20.2, 10 in Section 20.3, 3 in Section 20.4, 8 in Section 20.6), 44 tests remaining
 
 ---
 
@@ -940,16 +940,25 @@ The finalization system has subtle timing behavior that depends on REAL TIME ela
 - [ ] Finalization check boundary: exact equality triggers progression
 - [ ] Timestamp offset arithmetic edge cases (very short and very long durations)
 
-### 20.6 Cascading Withdrawals Over Time ⚠️ INCOMPLETE (8 tests)
+### 20.6 Cascading Withdrawals Over Time ✅ COMPLETE (8 tests)
 
-- [ ] 1st withdrawal attempt (t=0, immediately after settlement): fails with NoWithdrawableBalance (amounts in pending)
-- [ ] 2nd withdrawal attempt (t = disputeWindow): fails with NoWithdrawableBalance (amounts in finalizing, not withdrawable yet)
-- [ ] 3rd withdrawal attempt (t = 2*disputeWindow): succeeds (amounts reach withdrawable state)
-- [ ] 4th withdrawal attempt (immediately after 3rd): fails with NoWithdrawableBalance (no new withdrawable amounts)
-- [ ] 5th withdrawal attempt (after new settlements + 2 dispute windows): succeeds (new batch finalized)
-- [ ] Withdrawal extracts full chargedAmountWithdrawable amount (lines 892-902)
-- [ ] chargedAmountWithdrawable cleared to 0 after successful withdrawal (line 896)
-- [ ] Multiple settlements between withdrawals accumulate correctly in pipeline
+**Implementation Notes**:
+- Tests verify withdrawal timing through the three-state pipeline over multiple time periods
+- Uses `waitForFirstFinalization` helper to test amounts in finalizing state
+- Tests verify cascading behavior: multiple withdrawals over time as new batches finalize
+- Double-cascade logic: `_updateFinalizationState` runs twice per call (lines 322-372)
+
+**Covered Scenarios**:
+1. ✅ 1st withdrawal attempt (t=0): Fails with NoWithdrawableBalance (amounts in pending)
+2. ✅ 2nd withdrawal attempt (t = disputeWindow): Fails with NoWithdrawableBalance (amounts in finalizing)
+3. ✅ 3rd withdrawal attempt (t = 2*disputeWindow): Succeeds (amounts reach withdrawable)
+4. ✅ 4th withdrawal attempt (immediately after 3rd): Fails with NoWithdrawableBalance (no new amounts)
+5. ✅ 5th withdrawal attempt (after new settlements + 2 dispute windows): Succeeds (new batch finalized)
+6. ✅ Withdrawal extracts full chargedAmountWithdrawable amount
+7. ✅ chargedAmountWithdrawable cleared to 0 after successful withdrawal
+8. ✅ Multiple settlements between withdrawals accumulate correctly in pipeline
+
+- ✅ All 8 tests passing
 
 ### 20.7 Edge Cases & Boundary Conditions ⚠️ INCOMPLETE (12 tests)
 
@@ -1221,11 +1230,32 @@ test/
 - **Section 20.2 - Three-State Pipeline Progression (15 tests)** ✅ COMPLETE
 - **Section 20.3 - Signature-Based Withdrawal (10 tests)** ✅ COMPLETE
 - **Section 20.4 - Access Control & Authorization (3 tests)** ✅ COMPLETE
+- **Section 20.6 - Cascading Withdrawals Over Time (8 tests)** ✅ COMPLETE
 
-**In Progress**: Section 20 - Agent Withdrawal Tests (40/92 tests complete)
-**Not Started**: Section 20.5-20.12 (52 tests remaining), plus Sections 1, 9-19, 21
+**In Progress**: Section 20 - Agent Withdrawal Tests (48/92 tests complete)
+**Not Started**: Section 20.5, 20.7-20.12 (44 tests remaining), plus Sections 1, 9-19, 21
 
 ### Recent Updates
+
+**2025-01-11**: ✅ **Completed Section 20.6 - Cascading Withdrawals Over Time** (8 tests)
+- **File**: [test/ZeroLC/ZeroLC.withdrawal.test.ts](test/ZeroLC/ZeroLC.withdrawal.test.ts)
+- **Test Results**: All 48 tests passing (12 in Section 20.1, 15 in Section 20.2, 10 in Section 20.3, 3 in Section 20.4, 8 in Section 20.6)
+- **Coverage**:
+  - ✅ Withdrawal timing through three-state pipeline over multiple periods
+  - ✅ 1st attempt (t=0): Fails (amounts in pending)
+  - ✅ 2nd attempt (t=disputeWindow): Fails (amounts in finalizing)
+  - ✅ 3rd attempt (t=2*disputeWindow): Succeeds (amounts withdrawable)
+  - ✅ 4th attempt (immediately after): Fails (no new amounts)
+  - ✅ 5th attempt (new settlements + time): Succeeds (new batch)
+  - ✅ Full chargedAmountWithdrawable extraction
+  - ✅ chargedAmountWithdrawable cleared to 0 after withdrawal
+  - ✅ Multiple settlements accumulate correctly
+- **Key Implementation Details**:
+  - Double-cascade logic: `_updateFinalizationState` runs twice per call (lines 322-372)
+  - Uses `waitForFirstFinalization` helper to test finalizing state (notBefore offset strategy)
+  - Tests verify cascading behavior across multiple withdrawal attempts over time
+  - Demonstrates time-based progression: pending → finalizing → withdrawable
+- **Next Section**: Section 20.5 - Finalization Timestamp Logic (10 tests) or Section 20.7 - Edge Cases (12 tests)
 
 **2025-01-11**: ✅ **Completed Section 20.4 - Access Control & Authorization** (3 tests)
 - **File**: [test/ZeroLC/ZeroLC.withdrawal.test.ts](test/ZeroLC/ZeroLC.withdrawal.test.ts)

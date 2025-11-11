@@ -1937,4 +1937,321 @@ describe("ZeroLC - Agent Withdrawal", function () {
       expect(balanceAfter - balanceBefore).to.equal(CHARGE_AMOUNT);
     });
   });
+
+  // ============================================================================
+  // Section 20.6 - Cascading Withdrawals Over Time (8 tests)
+  // Tests for withdrawal timing through the three-state pipeline
+  // ============================================================================
+
+  describe("Section 20.6 - Cascading Withdrawals Over Time", function () {
+    const MICRO_AMOUNT = 1000000n; // 1 million wei
+    const CHARGE_AMOUNT = 100000n; // 100k wei
+    const DISPUTE_WINDOW = 3600; // 1 hour
+
+    it("should fail 1st withdrawal attempt (t=0, immediately after settlement) - amounts in pending", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      // Settle charges
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Attempt immediate withdrawal (t=0, amounts still in pending)
+      await expect(
+        zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true)
+      ).to.be.revertedWithCustomError(zeroLC, "NoWithdrawableBalance");
+    });
+
+    it("should fail 2nd withdrawal attempt (t = disputeWindow) - amounts in finalizing", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForFirstFinalization } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup with earlier notBefore to create a gap for finalization timing
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const notBefore = currentTime - DISPUTE_WINDOW / 2;
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        notBefore,
+        currentTime + 86400
+      );
+
+      // Single settlement
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Wait for first finalization (moves pending to finalizing)
+      await waitForFirstFinalization(scope);
+
+      // Attempt withdrawal (amounts in finalizing, not withdrawable yet)
+      await expect(
+        zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true)
+      ).to.be.revertedWithCustomError(zeroLC, "NoWithdrawableBalance");
+    });
+
+    it("should succeed 3rd withdrawal attempt (t = 2*disputeWindow) - amounts reach withdrawable", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, gasToken } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      // Settle charges
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Wait for 2 dispute windows (amounts reach withdrawable)
+      await waitForWithdrawal(scope);
+
+      // Withdrawal should succeed
+      const balanceBefore = await gasToken.balanceOf(agent1.address);
+
+      await zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true);
+
+      // Verify successful withdrawal
+      const balanceAfter = await gasToken.balanceOf(agent1.address);
+      expect(balanceAfter - balanceBefore).to.equal(CHARGE_AMOUNT);
+    });
+
+    it("should fail 4th withdrawal attempt (immediately after 3rd) - no new withdrawable amounts", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      // Settle charges
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Wait and withdraw
+      await waitForWithdrawal(scope);
+      await zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true);
+
+      // Attempt immediate second withdrawal (should fail - no new withdrawable amounts)
+      await expect(
+        zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true)
+      ).to.be.revertedWithCustomError(zeroLC, "NoWithdrawableBalance");
+    });
+
+    it("should succeed 5th withdrawal attempt (after new settlements + 2 dispute windows)", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, gasToken } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      // First settlement
+      await time.increase(1);
+      let batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Wait and withdraw first batch
+      await waitForWithdrawal(scope);
+      const balanceBefore1 = await gasToken.balanceOf(agent1.address);
+      await zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true);
+      const balanceAfter1 = await gasToken.balanceOf(agent1.address);
+      expect(balanceAfter1 - balanceBefore1).to.equal(CHARGE_AMOUNT);
+
+      // Second settlement (new batch)
+      await time.increase(1);
+      batchTimestamp = await time.latest();
+      const SECOND_CHARGE = CHARGE_AMOUNT / 2n;
+      await settleCharges(scope, agent1, [
+        { scaledAmount: SECOND_CHARGE, nonce: 2, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Wait and withdraw second batch
+      await waitForWithdrawal(scope);
+      const balanceBefore2 = await gasToken.balanceOf(agent1.address);
+      await zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true);
+      const balanceAfter2 = await gasToken.balanceOf(agent1.address);
+      expect(balanceAfter2 - balanceBefore2).to.equal(SECOND_CHARGE);
+    });
+
+    it("should extract full chargedAmountWithdrawable amount", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, gasToken } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      // Single settlement
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Wait for withdrawal (2 dispute windows)
+      await waitForWithdrawal(scope);
+
+      // Withdraw - this will extract the full chargedAmountWithdrawable
+      const balanceBefore = await gasToken.balanceOf(agent1.address);
+
+      await zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true);
+
+      const balanceAfter = await gasToken.balanceOf(agent1.address);
+      const actualWithdrawn = balanceAfter - balanceBefore;
+
+      // Verify full amount extracted
+      expect(actualWithdrawn).to.equal(CHARGE_AMOUNT);
+    });
+
+    it("should clear chargedAmountWithdrawable to 0 after successful withdrawal", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      // First settlement
+      await time.increase(1);
+      let batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Second settlement (triggers finalization)
+      await time.increase(1);
+      batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT / 2n, nonce: 2, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Wait for 2 dispute windows
+      await time.increase(DISPUTE_WINDOW * 2);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+
+      // Withdraw (this will trigger _updateFinalizationState which populates chargedAmountWithdrawable)
+      await zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true);
+
+      // Verify chargedAmountWithdrawable cleared to 0 after withdrawal
+      const scopeStateAfter = await zeroLC.authorizationScopes(scopeHash);
+      expect(scopeStateAfter.chargedAmountWithdrawable).to.equal(0);
+    });
+
+    it("should accumulate multiple settlements correctly in pipeline between withdrawals", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, gasToken } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      // First batch of settlements (3 charges)
+      await time.increase(1);
+      let batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await time.increase(1);
+      batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT / 2n, nonce: 2, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await time.increase(1);
+      batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT / 4n, nonce: 3, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      // Wait for all charges to become withdrawable
+      await waitForWithdrawal(scope);
+
+      // Withdraw accumulated amount
+      const balanceBefore = await gasToken.balanceOf(agent1.address);
+      await zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true);
+      const balanceAfter = await gasToken.balanceOf(agent1.address);
+
+      // Verify total accumulated amount withdrawn
+      const totalCharged = CHARGE_AMOUNT + CHARGE_AMOUNT / 2n + CHARGE_AMOUNT / 4n;
+      expect(balanceAfter - balanceBefore).to.equal(totalCharged);
+    });
+  });
 });
