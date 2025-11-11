@@ -1817,4 +1817,124 @@ describe("ZeroLC - Agent Withdrawal", function () {
       expect(balanceAfter - balanceBefore).to.equal(CHARGE_AMOUNT);
     });
   });
+
+  // ============================================================================
+  // Section 20.4 - Access Control & Authorization (3 tests)
+  // Tests for msg.sender requirements and signature bypass
+  // ============================================================================
+
+  describe("Section 20.4 - Access Control & Authorization", function () {
+    const MICRO_AMOUNT = 1000000n; // 1 million wei
+    const CHARGE_AMOUNT = 100000n; // 100k wei
+    const DISPUTE_WINDOW = 3600; // 1 hour
+
+    it("should allow direct withdrawal when msg.sender == scope.agent", async function () {
+      const { zeroLC, user1, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, gasToken } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Direct withdrawal by agent (msg.sender == scope.agent)
+      const balanceBefore = await gasToken.balanceOf(agent1.address);
+
+      await zeroLC.connect(agent1)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true);
+
+      // Verify successful withdrawal
+      const balanceAfter = await gasToken.balanceOf(agent1.address);
+      expect(balanceAfter - balanceBefore).to.equal(CHARGE_AMOUNT);
+    });
+
+    it("should revert with CallerNotAgent when msg.sender != scope.agent in direct withdrawal", async function () {
+      const { zeroLC, user1, user2, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Attempt direct withdrawal by non-agent (user2)
+      await expect(
+        zeroLC.connect(user2)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool)"](scope, true)
+      ).to.be.revertedWithCustomError(zeroLC, "CallerNotAgent");
+    });
+
+    it("should allow signature-based withdrawal to bypass msg.sender check", async function () {
+      const { zeroLC, user1, user2, agent1, depositForUser, registerScope, settleCharges, waitForWithdrawal, signWithdrawalRequest, gasToken } =
+        await loadFixture(deployZeroLCFixture);
+
+      // Setup
+      await depositForUser(user1, MICRO_AMOUNT);
+      const currentTime = await time.latest();
+      const scope = await registerScope(
+        user1,
+        agent1,
+        MICRO_AMOUNT,
+        DISPUTE_WINDOW,
+        currentTime,
+        currentTime + 86400
+      );
+
+      await time.increase(1);
+      const batchTimestamp = await time.latest();
+      await settleCharges(scope, agent1, [
+        { scaledAmount: CHARGE_AMOUNT, nonce: 1, notAfter: currentTime + 86400 },
+      ], batchTimestamp);
+
+      await waitForWithdrawal(scope);
+
+      // Get agent's nonce and sign
+      const agentState = await zeroLC.userStates(agent1.address);
+      const nonce = agentState.nonce;
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const signature = await signWithdrawalRequest(agent1, scopeHash, true, nonce);
+
+      // Third-party (user2) submits withdrawal with valid signature
+      // This should succeed even though msg.sender != scope.agent
+      const balanceBefore = await gasToken.balanceOf(agent1.address);
+
+      await zeroLC.connect(user2)["withdrawAgentChargedFund((address,uint40,address,uint40,uint40,uint128,uint8),bool,bytes)"](
+        scope,
+        true,
+        signature
+      );
+
+      // Verify successful withdrawal
+      const balanceAfter = await gasToken.balanceOf(agent1.address);
+      expect(balanceAfter - balanceBefore).to.equal(CHARGE_AMOUNT);
+    });
+  });
 });

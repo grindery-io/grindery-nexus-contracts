@@ -775,7 +775,7 @@ The contract has been upgraded to use a three-state withdrawal pipeline system. 
 
 ## 20. Agent Withdrawal Tests ⚙️ IN PROGRESS (92 tests total)
 
-**Status**: Section 20.1, 20.2, and 20.3 COMPLETE (37/92 tests). Critical finalization timing behavior documented.
+**Status**: Sections 20.1, 20.2, 20.3, and 20.4 COMPLETE (40/92 tests). Critical finalization timing behavior documented.
 
 **Breaking Changes in Three-State System**:
 - ❌ **`recentCharges` parameter REMOVED** from `withdrawAgentChargedFund()`
@@ -813,7 +813,7 @@ This behavior is **intentional and correct** - it ensures proper dispute window 
 
 **Contract Reference**: See [ZeroLC.sol:854-925](contracts/ZeroLC.sol#L854-L925) for withdrawal implementation with comprehensive finalization timing documentation.
 
-**Test Count**: 37 tests completed (12 in Section 20.1, 15 in Section 20.2, 10 in Section 20.3), 55 tests remaining
+**Test Count**: 40 tests completed (12 in Section 20.1, 15 in Section 20.2, 10 in Section 20.3, 3 in Section 20.4), 52 tests remaining
 
 ---
 
@@ -909,11 +909,23 @@ The finalization system has subtle timing behavior that depends on REAL TIME ela
 - ✅ Verifies universalSigValidator integration for EOA signatures
 - ✅ All 10 tests passing
 
-### 20.4 Access Control & Authorization ⚠️ INCOMPLETE (3 tests)
+### 20.4 Access Control & Authorization ✅ COMPLETE (3 tests)
 
-- [ ] Direct withdrawal requires msg.sender == scope.agent (line 835)
-- [ ] Direct withdrawal by non-agent (should revert CallerNotAgent)
-- [ ] Signature-based withdrawal verifies agent signature (bypasses msg.sender check)
+**Implementation Notes**:
+- Direct withdrawal function (lines 918-925) requires `msg.sender == scope.agent` (line 923)
+- Reverts with `CallerNotAgent` when unauthorized caller attempts direct withdrawal
+- Signature-based withdrawal function (lines 927-956) bypasses msg.sender check by verifying agent signature
+- Tests verify both authorization paths work correctly
+
+**Covered Scenarios**:
+1. ✅ Direct withdrawal succeeds when `msg.sender == scope.agent`
+2. ✅ Direct withdrawal reverts with `CallerNotAgent` when `msg.sender != scope.agent`
+3. ✅ Third-party can submit withdrawal with valid agent signature (bypasses msg.sender requirement)
+
+- ✅ Direct withdrawal requires msg.sender == scope.agent (line 923)
+- ✅ Direct withdrawal by non-agent (should revert CallerNotAgent)
+- ✅ Signature-based withdrawal verifies agent signature (bypasses msg.sender check)
+- ✅ All 3 tests passing
 
 ### 20.5 Finalization Timestamp Logic ⚠️ INCOMPLETE (10 tests)
 
@@ -1208,11 +1220,27 @@ test/
 - **Section 20.1 - Basic Withdrawal Flow (12 tests)** ✅ COMPLETE
 - **Section 20.2 - Three-State Pipeline Progression (15 tests)** ✅ COMPLETE
 - **Section 20.3 - Signature-Based Withdrawal (10 tests)** ✅ COMPLETE
+- **Section 20.4 - Access Control & Authorization (3 tests)** ✅ COMPLETE
 
-**In Progress**: Section 20 - Agent Withdrawal Tests (37/92 tests complete)
-**Not Started**: Section 20.4-20.12 (55 tests remaining), plus Sections 1, 9-19, 21
+**In Progress**: Section 20 - Agent Withdrawal Tests (40/92 tests complete)
+**Not Started**: Section 20.5-20.12 (52 tests remaining), plus Sections 1, 9-19, 21
 
 ### Recent Updates
+
+**2025-01-11**: ✅ **Completed Section 20.4 - Access Control & Authorization** (3 tests)
+- **File**: [test/ZeroLC/ZeroLC.withdrawal.test.ts](test/ZeroLC/ZeroLC.withdrawal.test.ts)
+- **Test Results**: All 40 tests passing (12 in Section 20.1, 15 in Section 20.2, 10 in Section 20.3, 3 in Section 20.4)
+- **Coverage**:
+  - ✅ Direct withdrawal authorization: `msg.sender == scope.agent` requirement (line 923)
+  - ✅ Unauthorized access prevention: `CallerNotAgent` revert when non-agent attempts direct withdrawal
+  - ✅ Signature-based bypass: Third-party can submit withdrawal with valid agent signature
+- **Key Implementation Details**:
+  - Two withdrawal functions with different authorization mechanisms:
+    - **Direct withdrawal** (lines 918-925): Requires `msg.sender == scope.agent`, enforced at line 923
+    - **Signature-based** (lines 927-956): Verifies agent signature, allows any caller
+  - Tests verify complete authorization matrix: agent can withdraw directly, non-agent cannot, third-party can with signature
+  - Clean separation of concerns between msg.sender check and signature verification
+- **Next Section**: Section 20.5 - Finalization Timestamp Logic (10 tests)
 
 **2025-01-11**: ✅ **Completed Section 20.3 - Signature-Based Withdrawal** (10 tests)
 - **File**: [test/ZeroLC/ZeroLC.withdrawal.test.ts](test/ZeroLC/ZeroLC.withdrawal.test.ts)
