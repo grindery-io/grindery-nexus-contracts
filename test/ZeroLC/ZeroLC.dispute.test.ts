@@ -1684,11 +1684,9 @@ describe("ZeroLC - Dispute Tests", function () {
         { scaledAmount: calculateScaledAmount(10000n, 0), nonce: 1, notAfter: timestamp1 + 3600 }
       ]);
 
-      // Advance time past dispute window - moves batch1 to finalizing
-      await time.increase(DISPUTE_WINDOW + 1);
-
-      // Settle batch2 (5000) - goes to pending
-      await time.increase(1);
+      // Settle batch2 (5000) - this triggers finalization from epoch, moves batch1 to finalizing
+      // Wait only a short time (NOT dispute window) to prevent double-run finalization
+      await time.increase(10);
       const timestamp2 = await time.latest();
       const { chargeBatch: batch2 } = await settleCharges(scope, agent, [
         { scaledAmount: calculateScaledAmount(5000n, 0), nonce: 2, notAfter: timestamp2 + 3600 }
@@ -1696,7 +1694,7 @@ describe("ZeroLC - Dispute Tests", function () {
 
       // Verify state before dispute
       const stateBefore = await zeroLC.authorizationScopes(scopeHash);
-      // At this point: batch1 (10000) is in finalizing, batch2 (5000) is in pending
+      // Second settlement triggers finalization from epoch: batch1 (10000) moved to finalizing, batch2 (5000) in pending
       expect(stateBefore.chargedAmountFinalizing).to.equal(calculateScaledAmount(10000n, 0));
       expect(stateBefore.chargedAmountPending).to.equal(calculateScaledAmount(5000n, 0));
 
@@ -1764,17 +1762,15 @@ describe("ZeroLC - Dispute Tests", function () {
         { scaledAmount: calculateScaledAmount(10000n, 0), nonce: 1, notAfter: timestamp + 3600 }
       ]);
 
-      // Advance time - moves to finalizing
-      await time.increase(DISPUTE_WINDOW + 1);
-
-      // Settle a small batch to trigger state update
-      await time.increase(1);
+      // Settle a small batch to trigger state update (moves first batch to finalizing)
+      // Wait only short time to prevent double-run finalization
+      await time.increase(10);
       const timestamp2 = await time.latest();
       const { chargeBatch: batch2 } = await settleCharges(scope, agent, [
         { scaledAmount: calculateScaledAmount(100n, 0), nonce: 2, notAfter: timestamp2 + 3600 }
       ]);
 
-      // Verify state: 10000 in finalizing, 100 in pending
+      // Verify state: 10000 in finalizing (from epoch finalization), 100 in pending
       const stateBefore = await zeroLC.authorizationScopes(scopeHash);
       expect(stateBefore.chargedAmountFinalizing).to.equal(calculateScaledAmount(10000n, 0));
       expect(stateBefore.chargedAmountPending).to.equal(calculateScaledAmount(100n, 0));
@@ -1804,17 +1800,14 @@ describe("ZeroLC - Dispute Tests", function () {
         { scaledAmount: calculateScaledAmount(3000n, 0), nonce: 1, notAfter: timestamp1 + 3600 }
       ]);
 
-      // Advance time - moves to finalizing
-      await time.increase(DISPUTE_WINDOW + 1);
-
-      // Settle batch2 (7000) - pending
-      await time.increase(1);
+      // Settle batch2 (7000) - triggers epoch finalization, moves batch1 to finalizing
+      await time.increase(10);
       const timestamp2 = await time.latest();
       const { chargeBatch: batch2 } = await settleCharges(scope, agent, [
         { scaledAmount: calculateScaledAmount(7000n, 0), nonce: 2, notAfter: timestamp2 + 3600 }
       ]);
 
-      // Verify state: 3000 in finalizing, 7000 in pending
+      // Verify state: 3000 in finalizing (from epoch finalization), 7000 in pending
       const stateBefore = await zeroLC.authorizationScopes(scopeHash);
       expect(stateBefore.chargedAmountFinalizing).to.equal(calculateScaledAmount(3000n, 0));
       expect(stateBefore.chargedAmountPending).to.equal(calculateScaledAmount(7000n, 0));
@@ -1988,17 +1981,14 @@ describe("ZeroLC - Dispute Tests", function () {
         { scaledAmount: calculateScaledAmount(30000n, 3), nonce: 1, notAfter: timestamp1 + 3600 }
       ]);
 
-      // Advance time - moves to finalizing
-      await time.increase(DISPUTE_WINDOW + 1);
-
-      // Settle batch2 (70000) - pending
-      await time.increase(1);
+      // Settle batch2 (70000) - triggers epoch finalization, moves batch1 to finalizing
+      await time.increase(10);
       const timestamp2 = await time.latest();
       const { chargeBatch: batch2 } = await settleCharges(scope, agent, [
         { scaledAmount: calculateScaledAmount(70000n, 3), nonce: 2, notAfter: timestamp2 + 3600 }
       ]);
 
-      // Verify state: 30000 in finalizing, 70000 in pending
+      // Verify state: 30000 in finalizing (from epoch finalization), 70000 in pending
       const stateBefore = await zeroLC.authorizationScopes(scopeHash);
       expect(stateBefore.chargedAmountFinalizing).to.equal(calculateScaledAmount(30000n, 3));
       expect(stateBefore.chargedAmountPending).to.equal(calculateScaledAmount(70000n, 3));

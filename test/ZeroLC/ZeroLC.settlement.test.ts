@@ -393,7 +393,9 @@ describe("ZeroLC - Charge Settlement", function () {
       const scopeHash = await zeroLC.getScopeHash(scope);
       const state = await zeroLC.authorizationScopes(scopeHash);
 
+      // First settlement: all charges go to pending (gas optimization prevents finalization)
       expect(state.chargedAmountPending).to.equal(calculateScaledAmount(10000n, granularity));
+      expect(state.chargedAmountFinalizing).to.equal(0);
 
       // Settle more charges
       await time.increase(10);
@@ -408,7 +410,11 @@ describe("ZeroLC - Charge Settlement", function () {
       await zeroLC.settleCharges([chargeBatch2]);
 
       const state2 = await zeroLC.authorizationScopes(scopeHash);
-      expect(state2.chargedAmountPending).to.equal(calculateScaledAmount(15000n, granularity));
+      // Second settlement: first charge moves to finalizing (epoch + disputeWindow has passed)
+      // Second charge goes to pending
+      expect(state2.chargedAmountPending).to.equal(calculateScaledAmount(5000n, granularity));
+      expect(state2.chargedAmountFinalizing).to.equal(calculateScaledAmount(10000n, granularity));
+      expect(state2.chargedAmountWithdrawable).to.equal(0);
     });
 
     it("should update lastChargeTimestamp offset correctly", async function () {
@@ -2018,7 +2024,9 @@ describe("ZeroLC - Charge Settlement", function () {
       ]);
       await zeroLC.settleCharges([batch1]);
 
-      // Second settlement (before dispute window passes)
+      // Second settlement
+      // NOTE: Second settlement triggers finalization (epoch + disputeWindow has passed)
+      // so first charge moves to finalizing, second charge goes to pending
       await time.increase(10);
       const laterTime = await time.latest();
       const batch2 = await createChargeBatch(
@@ -2032,8 +2040,10 @@ describe("ZeroLC - Charge Settlement", function () {
       const scopeHash = await zeroLC.getScopeHash(scope);
       const state = await zeroLC.authorizationScopes(scopeHash);
 
-      // Both charges should be in pending
-      expect(state.chargedAmountPending).to.equal(3000n);
+      // After second settlement: first charge in finalizing, second in pending
+      expect(state.chargedAmountPending).to.equal(2000n);
+      expect(state.chargedAmountFinalizing).to.equal(1000n);
+      expect(state.chargedAmountWithdrawable).to.equal(0);
     });
 
     it("should verify getAgentPendingAmount returns pending + finalizing", async function () {
@@ -2042,7 +2052,7 @@ describe("ZeroLC - Charge Settlement", function () {
 
       const totalAmount = 100000n;
       const granularity = 0;
-      const disputeWindow = 100; // Short dispute window for testing
+      const disputeWindow = 3600; // Use default dispute window
       await depositForUser(user1, totalAmount);
 
       const scope = await registerScope(user1, agent1, totalAmount, disputeWindow);
@@ -2051,22 +2061,29 @@ describe("ZeroLC - Charge Settlement", function () {
 
       // First settlement
       const batch1 = await createChargeBatch(scope, agent1, [
-        { scaledAmount: calculateScaledAmount(1000n, granularity), nonce: 1, notAfter: currentTime + 3600 },
+        { scaledAmount: calculateScaledAmount(1000n, granularity), nonce: 1, notAfter: currentTime + 86400 },
       ]);
       await zeroLC.settleCharges([batch1]);
 
-      // Wait for dispute window to pass
-      await time.increase(disputeWindow + 10);
-
-      // Second settlement (this triggers _updateFinalizationState)
+      // Second settlement (before dispute window passes)
+      // This triggers finalization from epoch → first settlement moves to finalizing
+      await time.increase(10);
       const laterTime = await time.latest();
       const batch2 = await createChargeBatch(
         scope,
         agent1,
-        [{ scaledAmount: calculateScaledAmount(2000n, granularity), nonce: 2, notAfter: laterTime + 3600 }],
+        [{ scaledAmount: calculateScaledAmount(2000n, granularity), nonce: 2, notAfter: laterTime + 86400 }],
         laterTime
       );
       await zeroLC.settleCharges([batch2]);
+
+      const scopeHash = await zeroLC.getScopeHash(scope);
+      const state = await zeroLC.authorizationScopes(scopeHash);
+
+      // After second settlement: 1000 in finalizing, 2000 in pending
+      expect(state.chargedAmountFinalizing).to.equal(1000n);
+      expect(state.chargedAmountPending).to.equal(2000n);
+      expect(state.chargedAmountWithdrawable).to.equal(0);
 
       // getAgentPendingAmount should return sum of pending + finalizing (not withdrawable)
       const agentPending = await zeroLC.getAgentPendingAmount(scope);
