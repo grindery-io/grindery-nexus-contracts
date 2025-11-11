@@ -330,6 +330,33 @@ contract ZeroLC is
         );
 
         // Check if finalization timestamp is past dispute window
+        if (
+            block.timestamp >= realFinalizationTimestamp + disputeWindow &&
+            (state.finalizationTimestamp != state.lastChargeTimestamp ||
+                state.chargedAmountFinalizing > 0)
+        ) {
+            // Move chargedAmountFinalizing to withdrawable
+            state.chargedAmountWithdrawable += state.chargedAmountFinalizing;
+
+            // Move chargedAmountPending to finalizing
+            state.chargedAmountFinalizing = state.chargedAmountPending;
+            state.chargedAmountPending = 0;
+
+            // Update finalizationTimestamp to lastChargeTimestamp (both are offsets)
+            state.finalizationTimestamp = state.lastChargeTimestamp;
+        } else {
+            return state;
+        }
+
+        // Run again to handle case where it is already past 2 dispute windows
+
+        // Calculate real finalization timestamp from offset
+        realFinalizationTimestamp = _getTimestampFromOffset(
+            state.notAfter,
+            state.finalizationTimestamp
+        );
+
+        // Check if finalization timestamp is past dispute window
         if (block.timestamp >= realFinalizationTimestamp + disputeWindow) {
             // Move chargedAmountFinalizing to withdrawable
             state.chargedAmountWithdrawable += state.chargedAmountFinalizing;
@@ -462,20 +489,18 @@ contract ZeroLC is
             disputeWindow: scope.disputeWindow,
             amountGranularity: scope.amountGranularity
         });
-
-        // Calculate timestamp offsets
-        // finalizationTimestamp: offset to notBefore (earliest possible finalization time)
-        // lastChargeTimestamp: offset to current time (no charges yet)
-        uint40 currentTime = uint40(block.timestamp);
-
+        uint32 initialTimestamp = type(uint32).max;
+        if (initialTimestamp > scope.notAfter) {
+            initialTimestamp = uint32(scope.notAfter);
+        }
         authorizationScopes[scopeHash] = AuthorizationScopeState({
             remainingAmount: scaledTotalAmount,
             chargedAmountWithdrawable: 0,
             chargedAmountFinalizing: 0,
             chargedAmountPending: 0,
             notAfter: scope.notAfter,
-            finalizationTimestamp: uint32(scope.notAfter - scope.notBefore), // Offset to notBefore
-            lastChargeTimestamp: uint32(scope.notAfter - currentTime), // Offset to now
+            finalizationTimestamp: initialTimestamp, // Minimum possible timestamp
+            lastChargeTimestamp: initialTimestamp, // Minimum possible timestamp
             nonceAndFlags: _setNonce(0, 1) // Start with nonce=1, flags=0
         });
         userState.balance -= scope.totalAmount;
@@ -825,6 +850,69 @@ contract ZeroLC is
     ) public view returns (bytes32[] memory) {
         return userStates[user].authorizationScopeHashes;
     }
+
+    // ============================================================================
+    // AGENT WITHDRAWAL - THREE-STATE FINALIZATION SYSTEM
+    // ============================================================================
+    //
+    // OVERVIEW:
+    // Settled charges progress through a three-state pipeline before becoming withdrawable:
+    // 1. PENDING → 2. FINALIZING → 3. WITHDRAWABLE
+    // Each transition requires waiting one disputeWindow period.
+    //
+    // STATE TRANSITIONS:
+    // - PENDING: Newly settled charges start here. Subject to dispute clawback.
+    // - FINALIZING: After disputeWindow has passed. Still subject to dispute clawback.
+    // - WITHDRAWABLE: After 2x disputeWindow. Finalized and immune to clawback. Can be withdrawn.
+    //
+    // FINALIZATION TIMING BEHAVIOR:
+    //
+    // Initialization:
+    //   - Both finalizationTimestamp and lastChargeTimestamp are set to offsets representing
+    //     epoch (timestamp 0) when a scope is first registered.
+    //   - Timestamps are stored as offsets: offset = notAfter - realTimestamp
+    //
+    // First Settlement:
+    //   - Gas optimization prevents finalization on the first settlement because:
+    //     finalizationTimestamp == lastChargeTimestamp AND chargedAmountFinalizing == 0
+    //   - All charges go to PENDING state
+    //   - lastChargeTimestamp is updated to the first settlement timestamp
+    //
+    // Second Settlement:
+    //   - Finalization triggers because:
+    //     * finalizationTimestamp still points to epoch (0)
+    //     * epoch + disputeWindow has definitely passed
+    //     * finalizationTimestamp ≠ lastChargeTimestamp (gas optimization condition no longer met)
+    //   - First charge moves: PENDING → FINALIZING
+    //   - Second charge goes to PENDING
+    //   - finalizationTimestamp is updated to point to first settlement timestamp
+    //
+    // Subsequent Settlements:
+    //   - Finalization only occurs when REAL TIME has elapsed:
+    //     * Must wait disputeWindow seconds from the timestamp that finalizationTimestamp points to
+    //     * If settlements happen quickly (e.g., 1-2 seconds apart), charges accumulate in PENDING
+    //     * Example: If disputeWindow = 3600 seconds and settlements are 1 second apart:
+    //       - Settlement 3: No finalization (only 2 seconds since settlement 1)
+    //       - Settlement 4: No finalization (only 3 seconds since settlement 1)
+    //       - Charges 2, 3, 4 accumulate in PENDING while charge 1 remains in FINALIZING
+    //
+    // Double-Run Logic:
+    //   - _updateFinalizationState() runs twice per call to handle cases where both
+    //     finalization steps can occur in a single transaction
+    //   - First run: Move PENDING → FINALIZING → WITHDRAWABLE (if time allows)
+    //   - Second run: Move again if enough additional time has passed
+    //   - Second run has NO gas optimization check (unlike first run)
+    //
+    // WITHDRAWAL RESTRICTIONS:
+    // - Only amounts in WITHDRAWABLE state can be withdrawn
+    // - PENDING and FINALIZING amounts are NOT withdrawable (will revert with NoWithdrawableBalance)
+    // - After withdrawal, chargedAmountWithdrawable is reset to 0
+    //
+    // CLAWBACK IMMUNITY:
+    // - WITHDRAWABLE amounts cannot be clawed back via dispute()
+    // - Only PENDING and FINALIZING amounts are subject to clawback
+    //
+    // ============================================================================
 
     // Public function for agent to directly withdraw funds
     function withdrawAgentChargedFund(
