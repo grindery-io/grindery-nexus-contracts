@@ -286,8 +286,12 @@ describe("ZeroLC - Dispute Tests", function () {
       const agentPending = await zeroLC.getAgentPendingAmount(scope);
       expect(agentPending).to.equal(0);
 
-      const currentTime = await time.latest();
-      expect(scopeStateAfter.notAfter).to.be.lessThanOrEqual(currentTime + 1);
+      // Verify FLAG_SCOPE_STATUS_DEACTIVATED is set (prevents future settlements)
+      const FLAG_SCOPE_STATUS_DEACTIVATED = 1 << 22;
+      expect(Number(scopeStateAfter.nonceAndFlags) & FLAG_SCOPE_STATUS_DEACTIVATED).to.equal(FLAG_SCOPE_STATUS_DEACTIVATED);
+
+      // Original notAfter should be unchanged
+      expect(scopeStateAfter.notAfter).to.equal(scope.notAfter);
       expect(userBalanceAfter.numDisputes).to.equal(userBalanceBefore.numDisputes + 1n);
     });
 
@@ -537,7 +541,7 @@ describe("ZeroLC - Dispute Tests", function () {
       expect(userBalanceAfter.balance).to.equal(userBalanceBefore.balance + CHARGE_AMOUNT);
     });
 
-    it("should set scope notAfter to block.timestamp", async function () {
+    it("should set FLAG_SCOPE_STATUS_DEACTIVATED on dispute to prevent future settlements", async function () {
       const { zeroLC, user, agent, depositForUser, registerScope, settleCharges, createDispute, calculateScaledAmount } =
         await loadFixture(deployZeroLCFixture);
 
@@ -554,10 +558,13 @@ describe("ZeroLC - Dispute Tests", function () {
       await zeroLC.dispute([dispute]);
 
       const scopeStateAfter = await zeroLC.authorizationScopes(scopeHash);
-      const currentTimestamp = await time.latest();
 
-      expect(scopeStateAfter.notAfter).to.be.lessThanOrEqual(currentTimestamp + 1);
-      expect(scopeStateAfter.notAfter).to.be.greaterThanOrEqual(currentTimestamp - 1);
+      // Verify FLAG_SCOPE_STATUS_DEACTIVATED is set
+      const FLAG_SCOPE_STATUS_DEACTIVATED = 1 << 22;
+      expect(Number(scopeStateAfter.nonceAndFlags) & FLAG_SCOPE_STATUS_DEACTIVATED).to.equal(FLAG_SCOPE_STATUS_DEACTIVATED);
+
+      // Original notAfter should be unchanged
+      expect(scopeStateAfter.notAfter).to.equal(scope.notAfter);
     });
 
     it("should increment numDisputes counter", async function () {

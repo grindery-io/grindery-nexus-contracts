@@ -159,6 +159,7 @@ contract ZeroLC is
     error UserCannotBeOwnAgent();
     error InsufficientBalance();
     error ScopeAlreadyRegistered();
+    error ScopeAlreadyRevoked();
     error ScopeNotActive();
     error ScopeAlreadyExhausted();
     error EmptyChargeBatch();
@@ -573,6 +574,7 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
+            require(state.nonceAndFlags & FLAG_SCOPE_STATUS_DEACTIVATED == 0, ScopeAlreadyRevoked());
             require(
                 block.timestamp < state.notAfter,
                 AuthorizationScopeExpired()
@@ -731,7 +733,8 @@ contract ZeroLC is
 
             state.chargedAmountFinalizing = newFinalizing;
             state.chargedAmountPending = newPending;
-            state.notAfter = uint40(block.timestamp);
+            state.nonceAndFlags = state.nonceAndFlags | FLAG_SCOPE_STATUS_DEACTIVATED;
+
             authorizationScopes[scopeHash] = state;
 
             // Need to unscale the clawback amount for user balance
