@@ -565,6 +565,15 @@ describe("ZeroLC - Dispute Tests", function () {
 
       // Original notAfter should be unchanged
       expect(scopeStateAfter.notAfter).to.equal(scope.notAfter);
+
+      // Verify that attempting to settle new charges fails with ScopeAlreadyRevoked
+      await time.increase(1);
+      const newTimestamp = await time.latest();
+      await expect(
+        settleCharges(scope, agent, [
+          { scaledAmount: calculateScaledAmount(CHARGE_AMOUNT / 2n, 0), nonce: 2, notAfter: newTimestamp + 3600 }
+        ])
+      ).to.be.revertedWithCustomError(zeroLC, "ScopeAlreadyRevoked");
     });
 
     it("should increment numDisputes counter", async function () {
