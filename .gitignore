@@ -14,3 +14,4 @@ abi/
 deployments
 .openzeppelin/
 .env.dev
+gas-report-detailed.txt

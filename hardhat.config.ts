@@ -24,6 +24,7 @@ import { ethers } from "ethers";
 
 import "./tasks/refund";
 import "./tasks/paymasterDeposit";
+import "./tasks/gasReport";
 
 interface NetworkConfigExtra {
   gasTokenAddress?: `0x${string}`;
