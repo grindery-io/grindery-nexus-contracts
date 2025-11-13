@@ -102,10 +102,11 @@ struct ChargeEntry {
     uint24 nonce;
     uint40 notAfter;
 }
+uint256 constant CHARGE_ENTRY_BYTES = 12;
 
 // Rationale: Allows facilitator to batch charges with optimized gas cost and requires only single HTTP request per charge
 struct ChargeBatchVerifier {
-    // keccak256(abi.encode(ChargeEntry[:-1])) i.e. hash of all entries but last. set to 0x00 if there is only one entry
+    // keccak256(packedBytes[0:length-12]) i.e. hash of all packed entries but last. set to 0x00 if there is only one entry
     bytes32 batchPartHash;
     ChargeEntry lastEntry;
     bytes32 scopeHash; // keccak256(abi.encode(_domainSeparatorV4(), AuthorizationScope))
@@ -113,7 +114,7 @@ struct ChargeBatchVerifier {
 
 struct ChargeBatch {
     AuthorizationScope scope;
-    ChargeEntry[] entries;
+    bytes entries; // Packed ChargeEntry structs (12 bytes each)
     uint40 timestamp;
     bytes agentSignature; // Signature of keccak256(abi.encode(constructed ChargeBatchVerifier))
 }
@@ -190,6 +191,7 @@ contract ZeroLC is
     error NoWithdrawableBalance();
     error InvalidAmountGranularity();
     error InvalidTimestampRange();
+    error InvalidEntriesLength();
 
     bytes32 public constant ROLE_OPERATOR = keccak256("ROLE_OPERATOR");
 
@@ -249,7 +251,8 @@ contract ZeroLC is
         );
         gasToken = IERC20(_gasToken);
         universalSigValidator = UniversalSigValidator(_universalSigValidator);
-        _disableInitializers();
+        // _disableInitializers();
+        initialize();
     }
 
     function initialize() public virtual initializer {
@@ -316,6 +319,26 @@ contract ZeroLC is
         uint32 offset
     ) private pure returns (uint40) {
         return notAfter - offset;
+    }
+
+    // Packed bytes helpers for ChargeEntry extraction
+    function _getEntryCount(bytes calldata entries) private pure returns (uint256) {
+        require(entries.length % CHARGE_ENTRY_BYTES == 0, EmptyChargeBatch());
+        uint256 count = entries.length / CHARGE_ENTRY_BYTES;
+        require(count > 0, EmptyChargeBatch());
+        return count;
+    }
+
+    function _getEntryAt(bytes calldata entries, uint256 index) private pure returns (uint32 scaledAmount, uint24 nonce, uint40 notAfter) {
+        unchecked {
+            uint256 offset = index * CHARGE_ENTRY_BYTES;
+            // Extract uint32 scaledAmount from bytes [offset:offset+4]
+            scaledAmount = uint32(bytes4(entries[offset:offset+4]));
+            // Extract uint24 nonce from bytes [offset+4:offset+7]
+            nonce = uint24(bytes3(entries[offset+4:offset+7]));
+            // Extract uint40 notAfter from bytes [offset+7:offset+12]
+            notAfter = uint40(bytes5(entries[offset+7:offset+12]));
+        }
     }
 
     // State transition helper
@@ -542,16 +565,29 @@ contract ZeroLC is
         scopeHash = keccak256(
             abi.encode(_domainSeparatorV4(), chargeBatch.scope)
         );
-        uint numCharges = chargeBatch.entries.length;
+
+        // Validate entries length and get count
+        require(chargeBatch.entries.length % CHARGE_ENTRY_BYTES == 0, InvalidEntriesLength());
+        uint256 numCharges = chargeBatch.entries.length / CHARGE_ENTRY_BYTES;
         require(numCharges > 0, EmptyChargeBatch());
+
         ChargeBatchVerifier memory verifier;
+
         if (numCharges > 1) {
+            // Hash packed bytes excluding last entry (last 12 bytes)
             verifier.batchPartHash = keccak256(
-                abi.encode(chargeBatch.entries[0:numCharges - 1])
+                chargeBatch.entries[0:chargeBatch.entries.length - CHARGE_ENTRY_BYTES]
             );
         }
-        verifier.lastEntry = chargeBatch.entries[numCharges - 1];
+
+        // Extract last entry from packed bytes
+        (uint32 scaledAmount, uint24 nonce, uint40 notAfter) = _getEntryAt(
+            chargeBatch.entries,
+            numCharges - 1
+        );
+        verifier.lastEntry = ChargeEntry(scaledAmount, nonce, notAfter);
         verifier.scopeHash = scopeHash;
+
         require(
             ECDSA.recover(
                 MessageHashUtils.toEthSignedMessageHash(abi.encode(verifier)),
@@ -574,7 +610,10 @@ contract ZeroLC is
             AuthorizationScopeState memory state = authorizationScopes[
                 scopeHash
             ];
-            require(state.nonceAndFlags & FLAG_SCOPE_STATUS_DEACTIVATED == 0, ScopeAlreadyRevoked());
+            require(
+                state.nonceAndFlags & FLAG_SCOPE_STATUS_DEACTIVATED == 0,
+                ScopeAlreadyRevoked()
+            );
             require(
                 block.timestamp < state.notAfter,
                 AuthorizationScopeExpired()
@@ -594,34 +633,39 @@ contract ZeroLC is
                 BatchTimestampNotIncreasing()
             );
 
-            uint32 totalScaledAmount = 0;
-            uint24 nonce = _getNonce(state.nonceAndFlags);
-            for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
-                ChargeEntry memory entry = chargeBatch.entries[j];
-                require(entry.nonce == nonce, InvalidNonce());
-                require(block.timestamp < entry.notAfter, ChargeEntryExpired());
-                require(entry.scaledAmount > 0, InvalidChargeAmount());
-                totalScaledAmount += entry.scaledAmount;
-                nonce += 1;
+            // Use uint256 to save gas
+            uint256 totalScaledAmount = 0;
+            uint256 nonce = _getNonce(state.nonceAndFlags);
+            uint256 numEntries = chargeBatch.entries.length / CHARGE_ENTRY_BYTES;
+            unchecked {
+                for (uint256 j = 0; j < numEntries; j++) {
+                    (uint32 scaledAmount, uint24 entryNonce, uint40 entryNotAfter) = _getEntryAt(chargeBatch.entries, j);
+                    require(entryNonce == nonce, InvalidNonce());
+                    require(block.timestamp < entryNotAfter, ChargeEntryExpired());
+                    require(scaledAmount > 0, InvalidChargeAmount());
+                    totalScaledAmount += scaledAmount;
+                    nonce += 1;
+                }
             }
+            require(nonce <= 0x3FFFFF, InvalidNonce());
             uint32 remainingAmount = state.remainingAmount;
             require(
                 totalScaledAmount <= remainingAmount,
                 InsufficientBalance()
             );
             authorizationScopes[scopeHash] = AuthorizationScopeState({
-                remainingAmount: remainingAmount - totalScaledAmount,
+                remainingAmount: remainingAmount - uint32(totalScaledAmount),
                 chargedAmountWithdrawable: state.chargedAmountWithdrawable,
                 chargedAmountFinalizing: state.chargedAmountFinalizing,
                 chargedAmountPending: state.chargedAmountPending +
-                    totalScaledAmount,
+                    uint32(totalScaledAmount),
                 notAfter: state.notAfter,
                 finalizationTimestamp: state.finalizationTimestamp,
                 lastChargeTimestamp: _getTimestampOffset(
                     state.notAfter,
                     chargeBatch.timestamp
                 ),
-                nonceAndFlags: _setNonce(state.nonceAndFlags, nonce)
+                nonceAndFlags: _setNonce(state.nonceAndFlags, uint24(nonce))
             });
         }
         // TODO: Due to EIP-7702, this check is no longer reliable, we need to change it to check whether sender is EOA
@@ -637,8 +681,12 @@ contract ZeroLC is
         require(disputes.length > 0, InvalidBatchLength());
         for (uint256 i = 0; i < disputes.length; i++) {
             Dispute calldata d = disputes[i];
-            require(d.amountToClawback > 0, InvalidClawbackAmount());
+            uint32 amountToClawback = d.amountToClawback;
+            require(amountToClawback > 0, InvalidClawbackAmount());
             ChargeBatch calldata chargeBatch = d.chargeBatch;
+            address user = chargeBatch.scope.user;
+            address agent = chargeBatch.scope.agent;
+            uint8 amountGranularity = chargeBatch.scope.amountGranularity;
             bytes32 scopeHash = verifyChargeBatchSignature(chargeBatch);
             require(
                 block.timestamp - chargeBatch.timestamp <
@@ -656,13 +704,13 @@ contract ZeroLC is
                             "Dispute(bytes32 scopeHash,uint32 amountToClawback)"
                         ),
                         scopeHash,
-                        d.amountToClawback
+                        amountToClawback
                     )
                 )
             );
             require(
                 universalSigValidator.isValidSig(
-                    chargeBatch.scope.user,
+                    user,
                     digest,
                     d.signature
                 ),
@@ -684,30 +732,31 @@ contract ZeroLC is
             uint24 currentNonce = _getNonce(state.nonceAndFlags);
             uint32 totalChargedAmount = 0;
             uint24 expectedNonce = 0;
-            for (uint256 j = 0; j < chargeBatch.entries.length; j++) {
-                ChargeEntry memory entry = chargeBatch.entries[j];
+            uint256 numEntries = chargeBatch.entries.length / CHARGE_ENTRY_BYTES;
+            for (uint256 j = 0; j < numEntries; j++) {
+                (uint32 scaledAmount, uint24 entryNonce, ) = _getEntryAt(chargeBatch.entries, j);
 
                 // Validate nonce: must be < current (already settled)
-                require(entry.nonce < currentNonce, InvalidNonce());
+                require(entryNonce < currentNonce, InvalidNonce());
 
                 // Validate sequential nonces within batch
                 if (j == 0) {
-                    require(entry.nonce > 0, InvalidNonce());
-                    expectedNonce = entry.nonce;
+                    require(entryNonce > 0, InvalidNonce());
+                    expectedNonce = entryNonce;
                 } else {
-                    require(entry.nonce == ++expectedNonce, InvalidNonce());
+                    require(entryNonce == ++expectedNonce, InvalidNonce());
                 }
 
-                totalChargedAmount += entry.scaledAmount;
+                totalChargedAmount += scaledAmount;
             }
             require(
-                totalChargedAmount >= d.amountToClawback,
+                totalChargedAmount >= amountToClawback,
                 ClawbackExceedsBatchTotal()
             );
 
             // Cascading deduction: chargedAmountWithdrawable cannot be clawed back (finalized)
             // Deduct from chargedAmountFinalizing first, then chargedAmountPending
-            uint32 remaining = d.amountToClawback;
+            uint32 remaining = amountToClawback;
             uint32 newFinalizing = state.chargedAmountFinalizing;
             uint32 newPending = state.chargedAmountPending;
 
@@ -733,26 +782,25 @@ contract ZeroLC is
 
             state.chargedAmountFinalizing = newFinalizing;
             state.chargedAmountPending = newPending;
-            state.nonceAndFlags = state.nonceAndFlags | FLAG_SCOPE_STATUS_DEACTIVATED;
+            state.nonceAndFlags =
+                state.nonceAndFlags |
+                FLAG_SCOPE_STATUS_DEACTIVATED;
 
             authorizationScopes[scopeHash] = state;
 
             // Need to unscale the clawback amount for user balance
-            AuthorizationScopeData memory scopeData = authorizationScopeData[
-                scopeHash
-            ];
             uint128 unscaledClawback = _unscaleAmount(
                 d.amountToClawback,
-                scopeData.amountGranularity
+                amountGranularity
             );
 
-            UserState storage userState = userStates[chargeBatch.scope.user];
+            UserState storage userState = userStates[user];
             userState.balance += unscaledClawback;
             userState.numDisputes += 1;
             disputedCharges[disputeHash] = true;
             emit ChargeDisputed(
-                chargeBatch.scope.user,
-                chargeBatch.scope.agent,
+                user,
+                agent,
                 scopeHash,
                 unscaledClawback
             );
