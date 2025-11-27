@@ -80,6 +80,18 @@ task("gas-report", "Report gas consumption for settling charges in batches").set
 
   const scopeHash = await zeroLC.getScopeHash(scope);
 
+  // Helper to pack ChargeEntry structs into bytes (12 bytes each: uint32 + uint24 + uint40)
+  function packChargeEntries(entries: { scaledAmount: bigint; nonce: number; notAfter: number }[]): string {
+    const packed = entries
+      .map((e) =>
+        ethers
+          .solidityPacked(["uint32", "uint24", "uint40"], [e.scaledAmount, e.nonce, e.notAfter])
+          .slice(2) // Remove 0x prefix
+      )
+      .join("");
+    return "0x" + packed;
+  }
+
   // Helper to create charge batch
   async function createChargeBatch(numCharges: number, startNonce: number) {
     const currentTime = await time.latest();
@@ -94,14 +106,12 @@ task("gas-report", "Report gas consumption for settling charges in batches").set
       });
     }
 
-    // Create batch part hash
+    // Create batch part hash - pack all entries then hash all except last 12 bytes
     let batchPartHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
     if (chargeEntries.length > 1) {
-      const entriesWithoutLast = chargeEntries.slice(0, -1);
-      const encodedEntries = entriesWithoutLast.map((e) => [e.scaledAmount, e.nonce, e.notAfter]);
-      batchPartHash = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(["tuple(uint32,uint24,uint40)[]"], [encodedEntries])
-      );
+      const packedEntries = packChargeEntries(chargeEntries);
+      // Hash all bytes except the last 12 bytes (24 hex chars)
+      batchPartHash = ethers.keccak256("0x" + packedEntries.slice(2, -24));
     }
 
     const lastEntry = chargeEntries[chargeEntries.length - 1];
@@ -116,7 +126,7 @@ task("gas-report", "Report gas consumption for settling charges in batches").set
 
     return {
       scope: scope,
-      entries: chargeEntries,
+      entries: packChargeEntries(chargeEntries),
       timestamp: currentTime,
       agentSignature: agentSignature,
     };
